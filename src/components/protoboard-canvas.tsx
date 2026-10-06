@@ -374,10 +374,10 @@ export function ProtoboardCanvas({
     }
 
     const onPointerMove = (event: PointerEvent) => {
-      if (!pointers.has(event.pointerId)) return
-      pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
+      const tracked = pointers.has(event.pointerId)
+      if (tracked) pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
 
-      if (pointers.size >= 2 && pinch) {
+      if (tracked && pointers.size >= 2 && pinch) {
         const points = [...pointers.values()]
         const [a, b] = points
         const distance = Math.hypot(a.x - b.x, a.y - b.y)
@@ -396,7 +396,7 @@ export function ProtoboardCanvas({
         return
       }
 
-      if (pan && pan.id === event.pointerId) {
+      if (tracked && pan && pan.id === event.pointerId) {
         const dx = event.clientX - pan.originX
         const dy = event.clientY - pan.originY
         if (!pan.moved && dx * dx + dy * dy > 36) {
@@ -497,10 +497,17 @@ export function ProtoboardCanvas({
       drawRef.current()
     }
 
+    const onPointerLeave = () => {
+      if (pan?.moved || pinch) return
+      publishHover(null)
+      drawRef.current()
+    }
+
     canvas.addEventListener("pointerdown", onPointerDown)
     canvas.addEventListener("pointermove", onPointerMove)
     canvas.addEventListener("pointerup", onPointerUp)
     canvas.addEventListener("pointercancel", onPointerCancel)
+    canvas.addEventListener("pointerleave", onPointerLeave)
     canvas.addEventListener("wheel", onWheel, { passive: false })
 
     return () => {
@@ -509,6 +516,7 @@ export function ProtoboardCanvas({
       canvas.removeEventListener("pointermove", onPointerMove)
       canvas.removeEventListener("pointerup", onPointerUp)
       canvas.removeEventListener("pointercancel", onPointerCancel)
+      canvas.removeEventListener("pointerleave", onPointerLeave)
       canvas.removeEventListener("wheel", onWheel)
     }
   }, [])
