@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { sameHole, traceToSegment, type Hole, type Trace } from "@/lib/board"
+import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
 
 const PITCH = 28
 const MARGIN = 36
 const PAD_R = 5.6
 const HOLE_R = 3.15
-const TRACE_W = 2.35
+const LANE = 22
+const HOVER_R = 14
 
 type View = {
   panX: number
@@ -76,6 +77,24 @@ function roundRect(
   ctx.closePath()
 }
 
+function strokeLane(
+  ctx: CanvasRenderingContext2D,
+  start: Hole,
+  end: Hole,
+  color: string,
+) {
+  const from = holeXY(start.c, start.r)
+  const to = holeXY(end.c, end.r)
+  ctx.beginPath()
+  ctx.moveTo(from.x, from.y)
+  ctx.lineTo(to.x, to.y)
+  ctx.strokeStyle = color
+  ctx.lineWidth = LANE
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  ctx.stroke()
+}
+
 function hitHole(
   localX: number,
   localY: number,
@@ -91,8 +110,8 @@ function hitHole(
   const hole = holeXY(c, r)
   const dx = worldX - hole.x
   const dy = worldY - hole.y
-  const radius = Math.min(PITCH * 0.42, Math.max(11, 12 / view.zoom))
-  if (dx * dx + dy * dy > radius * radius) return null
+  const reach = PITCH * 0.72
+  if (dx * dx + dy * dy > reach * reach) return null
   return { c, r }
 }
 
@@ -163,48 +182,6 @@ export function ProtoboardCanvas({
     ctx.strokeStyle = "#072818"
     ctx.stroke()
 
-    ctx.lineCap = "round"
-    ctx.lineJoin = "round"
-    for (let index = 0; index < model.traces.length; index++) {
-      const trace = model.traces[index]
-      const start = holeXY(trace.a.c, trace.a.r)
-      const end = holeXY(trace.b.c, trace.b.r)
-      ctx.beginPath()
-      ctx.moveTo(start.x, start.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.strokeStyle = "rgba(0,0,0,0.55)"
-      ctx.lineWidth = TRACE_W + 2
-      ctx.stroke()
-      ctx.beginPath()
-      ctx.moveTo(start.x, start.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.strokeStyle = netColor(model.colorKeys[index] ?? index)
-      ctx.lineWidth = TRACE_W
-      ctx.stroke()
-    }
-
-    if (
-      model.draftStart &&
-      hover &&
-      !sameHole(model.draftStart, hover)
-    ) {
-      const start = holeXY(model.draftStart.c, model.draftStart.r)
-      const end = holeXY(hover.c, hover.r)
-      const segments = model.traces.map(traceToSegment)
-      segments.push(traceToSegment({ a: model.draftStart, b: hover }))
-      const previewKey = assignNets(segments).colorKeys[segments.length - 1] ?? 0
-      ctx.beginPath()
-      ctx.moveTo(start.x, start.y)
-      ctx.lineTo(end.x, end.y)
-      ctx.setLineDash([8 / view.zoom, 6 / view.zoom])
-      ctx.strokeStyle = netColor(previewKey)
-      ctx.globalAlpha = 0.95
-      ctx.lineWidth = TRACE_W
-      ctx.stroke()
-      ctx.setLineDash([])
-      ctx.globalAlpha = 1
-    }
-
     const minX = (0 - view.panX) / view.zoom
     const minY = (0 - view.panY) / view.zoom
     const maxX = (w - view.panX) / view.zoom
@@ -250,17 +227,59 @@ export function ProtoboardCanvas({
     ctx.fillStyle = "rgba(255,255,255,0.28)"
     ctx.fill()
 
-    const ring = (hole: Hole, radius: number, color: string, width: number) => {
-      const { x, y } = holeXY(hole.c, hole.r)
-      ctx.beginPath()
-      ctx.arc(x, y, radius, 0, Math.PI * 2)
-      ctx.strokeStyle = color
-      ctx.lineWidth = width
-      ctx.stroke()
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    for (let index = 0; index < model.traces.length; index++) {
+      const trace = model.traces[index]
+      strokeLane(ctx, trace.a, trace.b, netColor(model.colorKeys[index] ?? index))
     }
 
-    if (hover) ring(hover, PAD_R + 2.2, "rgba(255,255,255,0.9)", 1.3)
-    if (model.draftStart) ring(model.draftStart, PAD_R + 3.6, "#fff4cc", 1.8)
+    if (model.draftStart && hover && canCommit(model.draftStart, hover)) {
+      const previewTraces = [...model.traces, { a: model.draftStart, b: hover }]
+      const previewKey = assignNets(previewTraces).colorKeys[previewTraces.length - 1] ?? 0
+      strokeLane(ctx, model.draftStart, hover, netColor(previewKey))
+    }
+
+    const punchHoles = () => {
+      ctx.beginPath()
+      visitHoles((x, y) => {
+        ctx.moveTo(x + HOLE_R, y)
+        ctx.arc(x, y, HOLE_R, 0, Math.PI * 2)
+      })
+      ctx.fillStyle = "#070808"
+      ctx.fill()
+    }
+    punchHoles()
+
+    const markHole = (hole: Hole, fill: string, ring: string) => {
+      const { x, y } = holeXY(hole.c, hole.r)
+      ctx.beginPath()
+      ctx.arc(x, y, HOVER_R, 0, Math.PI * 2)
+      ctx.fillStyle = fill
+      ctx.fill()
+      ctx.lineWidth = 4
+      ctx.strokeStyle = ring
+      ctx.stroke()
+      ctx.beginPath()
+      ctx.arc(x, y, HOLE_R, 0, Math.PI * 2)
+      ctx.fillStyle = "#070808"
+      ctx.fill()
+    }
+
+    if (model.draftStart && (!hover || !sameHole(hover, model.draftStart))) {
+      markHole(model.draftStart, "rgba(255, 244, 204, 0.55)", "#fff4cc")
+    }
+    if (hover) {
+      const offAxis =
+        model.draftStart != null &&
+        !sameHole(model.draftStart, hover) &&
+        !canCommit(model.draftStart, hover)
+      markHole(
+        hover,
+        offAxis ? "rgba(255, 255, 255, 0.94)" : "rgba(255, 228, 64, 0.96)",
+        "#fffef6",
+      )
+    }
 
     if (PITCH * view.zoom >= 16) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -329,9 +348,17 @@ export function ProtoboardCanvas({
         (previous != null && hole != null && sameHole(previous, hole))
       if (unchanged) return
       hoverRef.current = hole
+      const draft = modelRef.current.draftStart
+      const offAxis =
+        hole != null &&
+        draft != null &&
+        !sameHole(draft, hole) &&
+        !canCommit(draft, hole)
       setStatus(
         hole
-          ? `Column ${hole.c + 1}, row ${hole.r + 1}`
+          ? offAxis
+            ? `Column ${hole.c + 1}, row ${hole.r + 1} — not on this row or column`
+            : `Column ${hole.c + 1}, row ${hole.r + 1}`
           : "Drag empty board to pan. Scroll or pinch to zoom.",
       )
     }
@@ -543,7 +570,7 @@ export function ProtoboardCanvas({
         ref={canvasRef}
         className="h-full w-full touch-none"
         style={{ cursor: "crosshair" }}
-        aria-label="Protoboard pin grid. PCB Trace is selected. Click a hole to start a trace, then a second hole to finish it. Drag empty board to pan."
+        aria-label="Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
       />
       <div className="pointer-events-none absolute inset-0">
         <p className="absolute bottom-3 left-3 max-w-[calc(100%-9rem)] rounded-md bg-black/60 px-2 py-1 text-xs text-white">

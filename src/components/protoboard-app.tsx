@@ -5,7 +5,7 @@ import { BoardSetup } from "@/components/board-setup"
 import { ChangeSizeDialog } from "@/components/change-size-dialog"
 import { ProtoboardCanvas } from "@/components/protoboard-canvas"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
-import { sameHole, traceToSegment, type Hole, type Trace } from "@/lib/board"
+import { canCommit, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
 
 export function ProtoboardApp() {
@@ -22,7 +22,7 @@ export function ProtoboardApp() {
   }, [])
 
   const assignment = useMemo(
-    () => assignNets(traces.map(traceToSegment)),
+    () => assignNets(traces),
     [traces],
   )
 
@@ -50,7 +50,7 @@ export function ProtoboardApp() {
       setDraft(hole)
       return
     }
-    if (sameHole(draft, hole)) return
+    if (!canCommit(draft, hole)) return
     setTraces((current) => [...current, { a: draft, b: hole }])
     setDraft(null)
   }

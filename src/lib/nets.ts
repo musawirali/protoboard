@@ -1,72 +1,22 @@
-export type Point = {
-  readonly x: number
-  readonly y: number
-}
-
-export type Segment = {
-  readonly a: Point
-  readonly b: Point
-}
+import { spansShareHole, type Trace } from "./board"
 
 export type NetAssignment = {
-  /** 1-based label per segment. Segments in one connected net share a label. */
+  /** 1-based label per trace. Traces in one connected net share a label. */
   labels: number[]
-  /** Oldest segment index in that segment's net. Stable key for the net color. */
+  /** Oldest trace index in that trace's net. Stable key for the net color. */
   colorKeys: number[]
   netCount: number
 }
 
-function cross(ax: number, ay: number, bx: number, by: number, cx: number, cy: number) {
-  return (bx - ax) * (cy - ay) - (by - ay) * (cx - ax)
-}
-
-function onSegment(a: Point, b: Point, c: Point) {
-  return (
-    Math.min(a.x, c.x) <= b.x &&
-    b.x <= Math.max(a.x, c.x) &&
-    Math.min(a.y, c.y) <= b.y &&
-    b.y <= Math.max(a.y, c.y)
-  )
-}
-
 /**
- * True when two traces share connectivity: a shared endpoint, a proper
- * crossing, a T-junction, or a colinear overlap. Grid coordinates are
- * integers, so the orientation test is exact.
+ * Connected components of axis-aligned traces. Two traces are one net when
+ * their hole spans share any pin, including a crossing's intersection hole
+ * and overlapping holes on the same row or column. Diagonal pairs cover no
+ * holes, so they never join a net. The earliest trace stays the root so the
+ * color does not move when a later trace joins.
  */
-export function segmentsIntersect(p: Segment, q: Segment) {
-  const o1 = cross(p.a.x, p.a.y, p.b.x, p.b.y, q.a.x, q.a.y)
-  const o2 = cross(p.a.x, p.a.y, p.b.x, p.b.y, q.b.x, q.b.y)
-  const o3 = cross(q.a.x, q.a.y, q.b.x, q.b.y, p.a.x, p.a.y)
-  const o4 = cross(q.a.x, q.a.y, q.b.x, q.b.y, p.b.x, p.b.y)
-
-  if (o1 === 0 && o2 === 0 && o3 === 0 && o4 === 0) {
-    return (
-      onSegment(p.a, q.a, p.b) ||
-      onSegment(p.a, q.b, p.b) ||
-      onSegment(q.a, p.a, q.b) ||
-      onSegment(q.a, p.b, q.b)
-    )
-  }
-
-  const opposite = (left: number, right: number) =>
-    (left > 0 && right < 0) || (left < 0 && right > 0)
-
-  if (opposite(o1, o2) && opposite(o3, o4)) return true
-  if (o1 === 0 && onSegment(p.a, q.a, p.b)) return true
-  if (o2 === 0 && onSegment(p.a, q.b, p.b)) return true
-  if (o3 === 0 && onSegment(q.a, p.a, q.b)) return true
-  if (o4 === 0 && onSegment(q.a, p.b, q.b)) return true
-  return false
-}
-
-/**
- * Connected components of traces. Two segments are in the same net when they
- * intersect or overlap, including a shared endpoint. The union keeps the
- * earliest segment as the root so a net's color stays put as later traces join.
- */
-export function assignNets(segments: readonly Segment[]): NetAssignment {
-  const count = segments.length
+export function assignNets(traces: readonly Trace[]): NetAssignment {
+  const count = traces.length
   const parent = Array.from({ length: count }, (_, index) => index)
 
   const find = (index: number) => {
@@ -91,7 +41,7 @@ export function assignNets(segments: readonly Segment[]): NetAssignment {
 
   for (let i = 0; i < count; i++) {
     for (let j = i + 1; j < count; j++) {
-      if (segmentsIntersect(segments[i], segments[j])) union(i, j)
+      if (spansShareHole(traces[i], traces[j])) union(i, j)
     }
   }
 

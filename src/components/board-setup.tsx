@@ -45,9 +45,9 @@ export function BoardSetup({ onCreate }: BoardSetupProps) {
       </p>
       <h1 className="mt-2 text-3xl font-semibold tracking-tight">Protoboard</h1>
       <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        Choose the pin grid before the board is drawn. A PCB trace is a straight
-        line from one hole to another. Traces that share a hole, cross, or
-        overlap join into one net.
+        Choose the pin grid before the board is drawn. A PCB trace runs along
+        one row or one column of holes. Traces that share a hole, including
+        where a row and column cross, join into one net.
       </p>
       <form
         className="mt-8 flex flex-col gap-4 rounded-xl border bg-card p-4 shadow-sm"

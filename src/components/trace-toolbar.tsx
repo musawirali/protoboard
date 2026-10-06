@@ -28,8 +28,8 @@ export function TraceToolbar({ draft, netCount, legend, onCancel }: TraceToolbar
         </Button>
         <p className="mt-2 text-sm leading-5 text-muted-foreground">
           {draft
-            ? `Start is column ${draft.c + 1}, row ${draft.r + 1}. Click a second hole to commit. The same hole does not draw a trace.`
-            : "Click a pin hole to start. Click a second hole to commit a straight trace at any angle."}
+            ? `Start is column ${draft.c + 1}, row ${draft.r + 1}. Click a hole on this row or column. A diagonal hole highlights, but it does not commit.`
+            : "Click a pin hole to start. Click a hole on the same row or column to lay a straight trace."}
         </p>
         {draft ? (
           <Button type="button" variant="outline" className="mt-3 h-11 w-full" onClick={onCancel}>
@@ -40,7 +40,7 @@ export function TraceToolbar({ draft, netCount, legend, onCancel }: TraceToolbar
       <div>
         <p className="text-sm font-medium">{netCount === 0 ? "No nets yet" : netLabel}</p>
         <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          A trace takes the color of its net. Shared holes, crossings, and overlaps connect.
+          A trace takes the color of its net. Spans that share a hole, including a crossing, connect.
         </p>
         {legend.length > 0 ? (
           <ul className="mt-2 flex flex-wrap gap-2">
