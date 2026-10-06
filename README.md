@@ -24,7 +24,10 @@ Unit tests cover axis-aligned spans, joins through an intermediate hole, crossin
 ## Usage
 
 1. Choose a grid before the board is drawn. Presets are 20×100 and 50×50. Custom sizes are whole numbers from 1 to 120 on each side.
-2. **PCB Trace** is selected once the board exists. Click a pin hole, then a hole on the same row or column, to commit a trace. The hovered hole is highlighted. A diagonal hole highlights but does not commit.
-3. Escape, or **Cancel trace**, drops an in-progress start. After the first click, a preview as thick as a committed trace follows a hole on that row or column.
-4. Drag empty board to pan. Use the wheel, pinch, or the zoom buttons to zoom.
-5. **Change size** starts a new grid. If traces exist, confirm before they are cleared.
+2. **Select** is the default. Click one trace or one pin hole. Click empty board to clear the selection. Moving the pointer does not start a trace.
+3. **PCB Trace** draws only after you choose it. Click a pin hole, then a hole on the same row or column, to commit a trace. The hovered hole is highlighted. A diagonal hole highlights but does not commit. Switching tools cancels an in-progress start.
+4. Escape, or **Cancel trace**, drops an in-progress start. After the first click, a preview as thick as a committed trace follows a hole on that row or column.
+5. The properties panel describes the selected trace or pin hole. **Remove** deletes that trace only and recomputes nets. A pin hole cannot be removed.
+6. **Undo** and **Redo** step through trace adds and removes, up to 20 moves. Ctrl/Cmd+Z undoes. Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes.
+7. Drag empty board to pan. Use the wheel, pinch, or the zoom buttons to zoom.
+8. **Change size** starts a new grid and clears undo history. If traces exist, confirm before they are cleared.

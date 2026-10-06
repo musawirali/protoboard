@@ -4,6 +4,7 @@ export type Hole = {
 }
 
 export type Trace = {
+  readonly id?: string
   readonly a: Hole
   readonly b: Hole
 }
