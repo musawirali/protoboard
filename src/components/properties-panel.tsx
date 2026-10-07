@@ -295,6 +295,30 @@ export function PropertiesPanel({
     )
   }
 
+  if (selection?.type === "trace" && selectedTrace?.kind === "wire" && traceIndex >= 0) {
+    const net = netForTrace(traceIndex)
+    return (
+      <section aria-label="Selected wire" className="rounded-lg border bg-card p-3">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Selected wire</h2>
+        <dl className="mt-2 flex flex-col gap-1.5 text-sm">
+          <Row label="Start">{holeLabel(selectedTrace.a)}</Row>
+          <Row label="End">{holeLabel(selectedTrace.b)}</Row>
+          <Row label="Net">{net ? <NetName net={net} /> : "On no net"}</Row>
+        </dl>
+        <Button
+          type="button"
+          variant="destructive"
+          className="mt-3 h-11 w-full"
+          onClick={() => {
+            if (selectedTrace.id) onRemoveTrace(selectedTrace.id)
+          }}
+        >
+          Remove
+        </Button>
+      </section>
+    )
+  }
+
   if (selection?.type === "trace" && selectedTrace && traceIndex >= 0) {
     const holes = holesOnSpan(selectedTrace.a, selectedTrace.b)
     const net = netForTrace(traceIndex)

@@ -8,7 +8,7 @@ import { ProtoboardCanvas } from "@/components/protoboard-canvas"
 import { ToolStrip } from "@/components/tool-strip"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
 import { UndoBar } from "@/components/undo-bar"
-import { canCommit, holesOnSpan, sameHole, type Hole, type Trace } from "@/lib/board"
+import { canCommit, holeOnSegment, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
 import { assignNets, displayNetName, netColor } from "@/lib/nets"
 import {
@@ -135,9 +135,7 @@ export function ProtoboardApp() {
   }
 
   function netForHole(hole: Hole) {
-    const index = traces.findIndex((trace) =>
-      holesOnSpan(trace.a, trace.b).some((pin) => sameHole(pin, hole)),
-    )
+    const index = traces.findIndex((trace) => holeOnSegment(trace, hole))
     return netAt(index)
   }
 
@@ -277,16 +275,17 @@ export function ProtoboardApp() {
   }
 
   function handleHoleClick(hole: Hole) {
-    if (tool === "trace") {
+    if (tool === "trace" || tool === "wire") {
       if (!draft) {
         setDraft(hole)
         return
       }
-      if (!canCommit(draft, hole)) return
+      if (tool === "trace" ? !canCommit(draft, hole) : sameHole(draft, hole)) return
       commitTrace({
         id: crypto.randomUUID(),
         a: draft,
         b: hole,
+        ...(tool === "wire" ? { kind: "wire" as const } : {}),
       })
       return
     }
@@ -367,7 +366,7 @@ export function ProtoboardApp() {
             colorKeys={assignment.colorKeys}
             parts={parts}
             tool={tool}
-            draftStart={tool === "trace" || isAxialTool(tool) || isHeaderTool(tool) ? draft : null}
+            draftStart={tool === "trace" || tool === "wire" || isAxialTool(tool) || isHeaderTool(tool) ? draft : null}
             selectedTraceId={selection?.type === "trace" ? selection.id : null}
             selectedPartId={selection?.type === "component" ? selection.id : null}
             selectedHole={selection?.type === "hole" ? selection.hole : null}

@@ -65,6 +65,28 @@ describe("trace history", () => {
     expect(traces).toEqual([first, second])
   })
 
+  it("undoes adding and removing a wire without dropping its kind", () => {
+    const lane = trace("lane", 0, 0, 4, 0)
+    const jumper = { ...trace("jump", 1, 0, 4, 3), kind: "wire" as const }
+    let traces = [lane]
+    const added: TraceEdit = { type: "add", index: 1, trace: jumper }
+    traces = applyEdit(traces, added, "redo")
+    expect(traces[1].kind).toBe("wire")
+    const removed: TraceEdit = { type: "remove", index: 1, trace: jumper }
+    traces = applyEdit(traces, removed, "redo")
+    expect(traces).toEqual([lane])
+    traces = applyEdit(traces, removed, "undo")
+    expect(traces[1]).toEqual(jumper)
+
+    const named: TraceEdit = { type: "rename", changes: [{ id: "jump", from: undefined, to: "Jump" }] }
+    traces = applyEdit(traces, named, "redo")
+    expect(traces[1].name).toBe("Jump")
+    expect(traces[1].kind).toBe("wire")
+    traces = applyEdit(traces, named, "undo")
+    expect(traces[1].name).toBeUndefined()
+    expect(traces[1].kind).toBe("wire")
+  })
+
   it("undoes a net rename and keeps the other trace's name", () => {
     const first = trace("a", 0, 0, 4, 0)
     const second = trace("b", 0, 2, 4, 2)

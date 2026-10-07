@@ -31,7 +31,8 @@ export type BoardSnapshot = {
 function withName(trace: Trace, name: string | undefined): Trace {
   if (!name) {
     if (trace.name == null) return trace
-    return { id: trace.id, a: trace.a, b: trace.b }
+    const cleared: Trace = { id: trace.id, a: trace.a, b: trace.b }
+    return trace.kind ? { ...cleared, kind: trace.kind } : cleared
   }
   if (trace.name === name) return trace
   return { ...trace, name }

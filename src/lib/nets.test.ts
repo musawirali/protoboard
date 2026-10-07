@@ -6,6 +6,10 @@ function trace(c1: number, r1: number, c2: number, r2: number): Trace {
   return { a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
 }
 
+function wire(c1: number, r1: number, c2: number, r2: number): Trace {
+  return { kind: "wire", a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
+}
+
 describe("axis-aligned spans", () => {
   it("includes every hole between the ends", () => {
     expect(holesOnSpan({ c: 1, r: 4 }, { c: 5, r: 4 })).toEqual([
@@ -78,5 +82,30 @@ describe("assignNets", () => {
       trace(0, 2, 4, 2),
     ])
     expect(diagonalAcrossARow.netCount).toBe(2)
+  })
+
+  it("joins a wire that shares a hole, ends on a span, or crosses", () => {
+    const sharedEnd = assignNets([trace(0, 0, 4, 0), wire(4, 0, 4, 3)])
+    expect(sharedEnd.netCount).toBe(1)
+    expect(sharedEnd.labels).toEqual([1, 1])
+    expect(sharedEnd.colorKeys).toEqual([0, 0])
+
+    const onSpan = assignNets([trace(0, 2, 6, 2), wire(3, 2, 3, 5)])
+    expect(onSpan.netCount).toBe(1)
+
+    const crossesBetweenHoles = assignNets([trace(1, 0, 1, 4), wire(0, 0, 2, 1)])
+    expect(crossesBetweenHoles.netCount).toBe(1)
+
+    const crossingWires = assignNets([wire(0, 0, 4, 4), wire(0, 4, 4, 0)])
+    expect(crossingWires.netCount).toBe(1)
+
+    const diagonalOverTrace = assignNets([trace(0, 2, 6, 2), wire(1, 0, 5, 4)])
+    expect(diagonalOverTrace.netCount).toBe(1)
+  })
+
+  it("keeps a disjoint wire on its own net", () => {
+    const result = assignNets([trace(0, 0, 3, 0), wire(0, 4, 3, 6)])
+    expect(result.netCount).toBe(2)
+    expect(result.labels[0]).not.toBe(result.labels[1])
   })
 })

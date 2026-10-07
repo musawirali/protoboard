@@ -59,6 +59,11 @@ export function TraceToolbar({ tool, draft, legend, onCancel, onRenameNet }: Tra
           Cancel trace
         </Button>
       ) : null}
+      {tool === "wire" && draft ? (
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={onCancel}>
+          Cancel wire
+        </Button>
+      ) : null}
       <section aria-label="Nets" className="rounded-lg border bg-card p-3">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Nets</h2>
         {legend.length === 0 ? (

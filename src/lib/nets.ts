@@ -1,4 +1,4 @@
-import { spansShareHole, type Trace } from "./board"
+import { segmentsConnect, type Trace } from "./board"
 
 export type NetAssignment = {
   /** 1-based label per trace. Traces in one connected net share a label. */
@@ -9,11 +9,11 @@ export type NetAssignment = {
 }
 
 /**
- * Connected components of axis-aligned traces. Two traces are one net when
- * their hole spans share any pin, including a crossing's intersection hole
- * and overlapping holes on the same row or column. Diagonal pairs cover no
- * holes, so they never join a net. The earliest trace stays the root so the
- * color does not move when a later trace joins.
+ * Connected components of PCB traces and wires. Two PCB traces are one net
+ * when their hole spans share any pin. A wire joins when it shares an end,
+ * ends on a hole in a trace span, or crosses or overlaps another segment.
+ * A bare diagonal trace still covers no holes. The earliest segment stays
+ * the root so the color does not move when a later segment joins.
  */
 export function assignNets(traces: readonly Trace[]): NetAssignment {
   const count = traces.length
@@ -41,7 +41,7 @@ export function assignNets(traces: readonly Trace[]): NetAssignment {
 
   for (let i = 0; i < count; i++) {
     for (let j = i + 1; j < count; j++) {
-      if (spansShareHole(traces[i], traces[j])) union(i, j)
+      if (segmentsConnect(traces[i], traces[j])) union(i, j)
     }
   }
 

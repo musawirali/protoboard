@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
+import { canCommit, isWire, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
 import {
   componentHitRadius,
@@ -32,6 +32,7 @@ const MARGIN = 36
 const PAD_R = 5.6
 const HOLE_R = 3.15
 const LANE = 22
+const WIRE = 2.5
 const HOVER_R = 14
 const SELECT_PIN = 11
 
@@ -95,6 +96,9 @@ function canvasLabel(tool: ToolName) {
   if (tool === "trace") {
     return "Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
   }
+  if (tool === "wire") {
+    return "Protoboard pin grid. Wire is selected. Click a hole to start, then any other hole to commit a thin wire. Drag empty board to pan."
+  }
   if (tool === "ic") {
     return "Protoboard pin grid. IC is selected. Click a pin hole to place pin 1. Drag empty board to pan."
   }
@@ -130,11 +134,12 @@ function roundRect(
   ctx.closePath()
 }
 
-function strokeLane(
+function strokeSegment(
   ctx: CanvasRenderingContext2D,
   start: Hole,
   end: Hole,
   color: string,
+  width: number,
 ) {
   const from = holeXY(start.c, start.r)
   const to = holeXY(end.c, end.r)
@@ -142,10 +147,18 @@ function strokeLane(
   ctx.moveTo(from.x, from.y)
   ctx.lineTo(to.x, to.y)
   ctx.strokeStyle = color
-  ctx.lineWidth = LANE
+  ctx.lineWidth = width
   ctx.lineCap = "round"
   ctx.lineJoin = "round"
   ctx.stroke()
+}
+
+function strokeLane(ctx: CanvasRenderingContext2D, start: Hole, end: Hole, color: string) {
+  strokeSegment(ctx, start, end, color, LANE)
+}
+
+function strokeWire(ctx: CanvasRenderingContext2D, start: Hole, end: Hole, color: string) {
+  strokeSegment(ctx, start, end, color, WIRE)
 }
 
 function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null) {
@@ -199,11 +212,17 @@ function distanceToSegment(
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy))
 }
 
-function hitTraceIndex(worldX: number, worldY: number, traces: readonly Trace[]) {
+function hitSegmentIndex(
+  worldX: number,
+  worldY: number,
+  traces: readonly Trace[],
+  wires: boolean,
+) {
   let best: { index: number; distance: number } | null = null
-  const limit = LANE / 2 + 1
+  const limit = wires ? 8 : LANE / 2 + 1
   for (let index = 0; index < traces.length; index++) {
     const trace = traces[index]
+    if (isWire(trace) !== wires) continue
     const from = holeXY(trace.a.c, trace.a.r)
     const to = holeXY(trace.b.c, trace.b.r)
     const distance = distanceToSegment(worldX, worldY, from.x, from.y, to.x, to.y)
@@ -211,7 +230,7 @@ function hitTraceIndex(worldX: number, worldY: number, traces: readonly Trace[])
       best = { index, distance }
     }
   }
-  return best?.index ?? null
+  return best
 }
 
 function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
@@ -259,8 +278,15 @@ function resolveSelect(
   if (pin) return { type: "hole", hole: pin }
   const part = hitPart(worldX, worldY, parts)
   if (part) return { type: "component", id: part.id }
-  const traceIndex = hitTraceIndex(worldX, worldY, traces)
-  const trace = traceIndex == null ? undefined : traces[traceIndex]
+  const wireHit = hitSegmentIndex(worldX, worldY, traces, true)
+  const traceHit = hitSegmentIndex(worldX, worldY, traces, false)
+  const picked =
+    wireHit && traceHit
+      ? wireHit.distance <= traceHit.distance
+        ? wireHit.index
+        : traceHit.index
+      : (wireHit?.index ?? traceHit?.index ?? null)
+  const trace = picked == null ? undefined : traces[picked]
   if (trace?.id) return { type: "trace", id: trace.id }
   const loose = hitHole(localX, localY, view, cols, rows)
   if (loose) return { type: "hole", hole: loose }
@@ -434,18 +460,30 @@ export function ProtoboardCanvas({
     }
     if (model.tool === "select" && hoverTraceRef.current && hoverTraceRef.current !== model.selectedTraceId) {
       const hovered = model.traces.find((trace) => trace.id === hoverTraceRef.current)
-      if (hovered) halo(hovered, LANE + 6, "rgba(255,255,255,0.55)")
+      if (hovered) halo(hovered, isWire(hovered) ? WIRE + 3 : LANE + 6, "rgba(255,255,255,0.55)")
     }
     for (let index = 0; index < model.traces.length; index++) {
       const trace = model.traces[index]
+      if (isWire(trace)) continue
       if (trace.id && trace.id === model.selectedTraceId) halo(trace, LANE + 8, "#fffef6")
       strokeLane(ctx, trace.a, trace.b, netColor(model.colorKeys[index] ?? index))
+    }
+    for (let index = 0; index < model.traces.length; index++) {
+      const trace = model.traces[index]
+      if (!isWire(trace)) continue
+      if (trace.id && trace.id === model.selectedTraceId) halo(trace, WIRE + 4, "#fffef6")
+      strokeWire(ctx, trace.a, trace.b, netColor(model.colorKeys[index] ?? index))
     }
 
     if (model.tool === "trace" && model.draftStart && hover && canCommit(model.draftStart, hover)) {
       const previewTraces = [...model.traces, { a: model.draftStart, b: hover }]
       const previewKey = assignNets(previewTraces).colorKeys[previewTraces.length - 1] ?? 0
       strokeLane(ctx, model.draftStart, hover, netColor(previewKey))
+    }
+    if (model.tool === "wire" && model.draftStart && hover && !sameHole(model.draftStart, hover)) {
+      const previewTraces = [...model.traces, { a: model.draftStart, b: hover, kind: "wire" as const }]
+      const previewKey = assignNets(previewTraces).colorKeys[previewTraces.length - 1] ?? 0
+      strokeWire(ctx, model.draftStart, hover, netColor(previewKey))
     }
 
     for (const part of model.parts) {
@@ -463,7 +501,7 @@ export function ProtoboardCanvas({
       !holeOccupied(model.parts, hover)
     const headerPreview =
       isHeaderTool(model.tool) && model.draftStart != null && hover != null && canPlaceHeader(model.parts, model.draftStart, hover)
-    if ((axialPreview || headerPreview) && model.draftStart && hover && model.tool !== "select" && model.tool !== "trace") {
+    if ((axialPreview || headerPreview) && model.draftStart && hover && model.tool !== "select" && model.tool !== "trace" && model.tool !== "wire") {
       drawPartSymbol(
         ctx,
         { id: "preview", kind: model.tool, name: "", value: "", a: model.draftStart, b: hover },
@@ -514,7 +552,21 @@ export function ProtoboardCanvas({
       ctx.fill()
     }
 
-    if (model.tool === "trace") {
+    if (model.tool === "wire") {
+      if (model.draftStart && (!hover || !sameHole(hover, model.draftStart))) {
+        markHole(model.draftStart, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
+      }
+      if (hover) {
+        const legal = model.draftStart == null || !sameHole(model.draftStart, hover)
+        markHole(
+          hover,
+          legal ? "rgba(255, 228, 64, 0.96)" : "rgba(255, 255, 255, 0.94)",
+          "#fffef6",
+          legal ? HOVER_R : 11,
+          legal ? 4 : 2.5,
+        )
+      }
+    } else if (model.tool === "trace") {
       if (model.draftStart && (!hover || !sameHole(hover, model.draftStart))) {
         markHole(model.draftStart, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
       }
@@ -863,7 +915,7 @@ export function ProtoboardCanvas({
         if (commitClick && !activePan.moved) {
           const local = localFromClient(event.clientX, event.clientY)
           const model = modelRef.current
-          if (model.tool === "trace" || isPartTool(model.tool)) {
+          if (model.tool === "trace" || model.tool === "wire" || isPartTool(model.tool)) {
             const hole =
               hitHole(local.x, local.y, viewRef.current, model.cols, model.rows) ?? activePan.hole
             if (hole) model.onHoleClick(hole)
