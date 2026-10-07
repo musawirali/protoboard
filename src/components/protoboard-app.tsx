@@ -1,13 +1,15 @@
 "use client"
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 import { BoardSetup } from "@/components/board-setup"
 import { ChangeSizeDialog } from "@/components/change-size-dialog"
+import { ProjectList } from "@/components/project-list"
 import { PropertiesPanel } from "@/components/properties-panel"
 import { ProtoboardCanvas } from "@/components/protoboard-canvas"
 import { ToolStrip } from "@/components/tool-strip"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
 import { UndoBar } from "@/components/undo-bar"
+import { Input } from "@/components/ui/input"
 import { canCommit, holeOnSegment, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
 import { assignNets, displayNetName, netColor } from "@/lib/nets"
@@ -27,6 +29,14 @@ import {
   type IcRotation,
   type PlacedPart,
 } from "@/lib/parts"
+import {
+  getProjectSnapshot,
+  getServerProjectSnapshot,
+  replaceProjects,
+  sameBoard,
+  subscribeProjects,
+  type SavedProject,
+} from "@/lib/projects"
 import { isAxialTool, isHeaderTool, type Selection, type ToolName } from "@/lib/selection"
 
 function selectionStillThere(
@@ -45,6 +55,11 @@ function selectionStillThere(
 }
 
 export function ProtoboardApp() {
+  const projects = useSyncExternalStore(subscribeProjects, getProjectSnapshot, getServerProjectSnapshot)
+  const [screen, setScreen] = useState<"list" | "create" | "editor">("list")
+  const [openId, setOpenId] = useState<string | null>(null)
+  const [name, setName] = useState("")
+  const [nameDraft, setNameDraft] = useState("")
   const [board, setBoard] = useState<{ cols: number; rows: number } | null>(null)
   const [traces, setTraces] = useState<Trace[]>([])
   const [parts, setParts] = useState<PlacedPart[]>([])
@@ -84,6 +99,23 @@ export function ProtoboardApp() {
     setDraft(null)
     setSelection((selected) => selectionStillThere(selected, next.traces, next.components))
   }, [])
+
+  const storeOpen = useCallback(
+    (projectName: string, nextBoard: { cols: number; rows: number }, nextTraces: Trace[], nextParts: PlacedPart[]) => {
+      if (!openId) return
+      const body = { name: projectName, cols: nextBoard.cols, rows: nextBoard.rows, traces: nextTraces, parts: nextParts }
+      const existing = getProjectSnapshot().find((item) => item.id === openId)
+      if (existing && sameBoard(existing, body)) return
+      const updated: SavedProject = { id: openId, ...body, updatedAt: Date.now() }
+      replaceProjects([updated, ...getProjectSnapshot().filter((item) => item.id !== openId)])
+    },
+    [openId],
+  )
+
+  useEffect(() => {
+    if (screen !== "editor" || !board) return
+    storeOpen(name, board, traces, parts)
+  }, [screen, name, board, traces, parts, storeOpen])
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -139,7 +171,7 @@ export function ProtoboardApp() {
     return netAt(index)
   }
 
-  function createBoard(cols: number, rows: number) {
+  function resetEditor(cols: number, rows: number) {
     setBoard({ cols, rows })
     setTraces([])
     setParts([])
@@ -148,6 +180,72 @@ export function ProtoboardApp() {
     setSelection(null)
     setPast([])
     setFuture([])
+  }
+
+  function openProject(project: SavedProject) {
+    setOpenId(project.id)
+    setName(project.name)
+    setNameDraft(project.name)
+    setBoard({ cols: project.cols, rows: project.rows })
+    setTraces(project.traces.map((trace) => ({ ...trace, a: { ...trace.a }, b: { ...trace.b } })))
+    setParts(
+      project.parts.map((part) => ({
+        ...part,
+        a: { ...part.a },
+        b: { ...part.b },
+        pinLabels: part.pinLabels ? [...part.pinLabels] : undefined,
+      })),
+    )
+    setDraft(null)
+    setTool("select")
+    setSelection(null)
+    setPast([])
+    setFuture([])
+    setScreen("editor")
+  }
+
+  function createProject(projectName: string, cols: number, rows: number) {
+    const project: SavedProject = {
+      id: crypto.randomUUID(),
+      name: projectName.trim(),
+      cols,
+      rows,
+      updatedAt: Date.now(),
+      traces: [],
+      parts: [],
+    }
+    replaceProjects([project, ...getProjectSnapshot()])
+    openProject(project)
+  }
+
+  function leaveEditor() {
+    if (openId && board) {
+      const trimmed = nameDraft.trim()
+      storeOpen(trimmed || name, board, traces, parts)
+      if (trimmed) {
+        setName(trimmed)
+        setNameDraft(trimmed)
+      } else {
+        setNameDraft(name)
+      }
+    }
+    setScreen("list")
+    setOpenId(null)
+    setBoard(null)
+  }
+
+  function commitProjectName() {
+    const trimmed = nameDraft.trim()
+    if (!trimmed) {
+      setNameDraft(name)
+      return
+    }
+    setName(trimmed)
+    setNameDraft(trimmed)
+  }
+
+  function deleteProject(id: string) {
+    replaceProjects(getProjectSnapshot().filter((item) => item.id !== id))
   }
 
   function chooseTool(next: ToolName) {
@@ -336,25 +434,60 @@ export function ProtoboardApp() {
     })
   }
 
-  if (!board) {
-    return <BoardSetup onCreate={createBoard} />
+  if (screen === "create") {
+    return <BoardSetup onBack={() => setScreen("list")} onCreate={createProject} />
+  }
+
+  if (screen !== "editor" || !board) {
+    return (
+      <ProjectList
+        projects={projects}
+        onOpen={openProject}
+        onCreate={() => setScreen("create")}
+        onDelete={deleteProject}
+      />
+    )
   }
 
   return (
     <div className="flex h-dvh min-h-0 flex-col overflow-hidden">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b px-3 py-2 sm:px-4">
-        <div className="min-w-0">
-          <h1 className="text-base font-semibold tracking-tight">Protoboard</h1>
-          <p className="text-xs text-muted-foreground">
-            {board.cols} × {board.rows} pin holes
-          </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={leaveEditor}
+          >
+            Projects
+          </button>
+          <div className="min-w-0">
+            <Input
+              aria-label="Project name"
+              value={nameDraft}
+              autoComplete="off"
+              spellCheck={false}
+              className="h-8 max-w-56 font-medium"
+              onChange={(event) => setNameDraft(event.target.value)}
+              onBlur={commitProjectName}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  event.currentTarget.blur()
+                }
+              }}
+            />
+            <p className="text-xs text-muted-foreground">
+              {board.cols} × {board.rows} pin holes
+            </p>
+          </div>
         </div>
         <ChangeSizeDialog
           cols={board.cols}
           rows={board.rows}
           traceCount={traces.length}
           partCount={parts.length}
-          onResize={createBoard}
+          onResize={resetEditor}
         />
       </header>
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">

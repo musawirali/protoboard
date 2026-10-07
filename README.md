@@ -23,7 +23,7 @@ Unit tests cover axis-aligned spans, joins through an intermediate hole, crossin
 
 ## Usage
 
-1. Choose a grid before the board is drawn. Presets are 20×100 and 50×50. Custom sizes are whole numbers from 1 to 120 on each side.
+1. The app opens on saved projects, stored in this browser. **New project** asks for a name and a grid. Presets are 20×100 and 50×50. Custom sizes are whole numbers from 1 to 120. An empty name does not create a board. Opening a project restores its traces, wires, components, and net names. **Projects** returns to the list. Edits save as they happen. Delete a project from the list. Rename it from the board.
 2. **Select** is the arrow at the left of the board, and it is the default. Click one trace, wire, component, or pin hole. Click empty board to clear the selection. Moving the pointer does not start a trace, a wire, or a component.
 3. **PCB Trace** is the thick lane icon under Select. It draws only after you choose it. Click a pin hole, then a hole on the same row or column, to commit a trace. The hovered hole is highlighted. A diagonal hole highlights but does not commit. Switching tools cancels an in-progress start.
 4. **Wire** is the thin diagonal jumper under PCB Trace. Click a pin hole, then any other hole, including a diagonal. The same hole does not commit. A thin preview follows the hovered hole. Escape or switching tools cancels the start. The wire takes its net color and stays thinner than a trace. Select shows that one wire: start, end, and net. Remove deletes only that wire.
