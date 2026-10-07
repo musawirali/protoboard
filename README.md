@@ -27,7 +27,7 @@ Unit tests cover axis-aligned spans, joins through an intermediate hole, crossin
 2. **Select** is the arrow at the left of the board, and it is the default. Click one trace or one pin hole. Click empty board to clear the selection. Moving the pointer does not start a trace.
 3. **PCB Trace** is the lane icon under Select. It draws only after you choose it. Click a pin hole, then a hole on the same row or column, to commit a trace. The hovered hole is highlighted. A diagonal hole highlights but does not commit. Switching tools cancels an in-progress start.
 4. Escape, or **Cancel trace**, drops an in-progress start. After the first click, a preview as thick as a committed trace follows a hole on that row or column.
-5. The properties panel describes the selected trace or pin hole. **Remove** deletes that trace only and recomputes nets. A pin hole cannot be removed. When the selection is on a net, edit the net name and press Enter or click away. That name is used everywhere for the net. An empty name is ignored.
+5. **Nets** lists every net. Edit a name there and press Enter or click away. An empty name is ignored. The name shows on every trace and pin hole in that net. **Selected trace** includes **Remove**, which deletes that trace only. A pin hole cannot be removed.
 6. **Undo** and **Redo** sit at the bottom of the screen. They step through trace adds, trace removes, and net renames, up to 20 moves. Ctrl/Cmd+Z undoes. Ctrl/Cmd+Shift+Z or Ctrl/Cmd+Y redoes.
 7. Drag empty board to pan. Use the wheel, pinch, or the zoom buttons to zoom.
 8. **Change size** starts a new grid and clears undo history. If traces exist, confirm before they are cleared.

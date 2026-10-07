@@ -1,4 +1,6 @@
+import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import type { Hole } from "@/lib/board"
 import type { ToolName } from "@/lib/selection"
 
@@ -6,58 +8,76 @@ export type NetLegendItem = {
   name: string
   colorKey: number
   color: string
+  index: number
 }
 
 type TraceToolbarProps = {
   tool: ToolName
   draft: Hole | null
-  netCount: number
   legend: NetLegendItem[]
   onCancel: () => void
+  onRenameNet: (index: number, name: string) => void
 }
 
-export function TraceToolbar({ tool, draft, netCount, legend, onCancel }: TraceToolbarProps) {
-  const netLabel = netCount === 1 ? "1 net" : `${netCount} nets`
+function NetNameField({
+  item,
+  onRenameNet,
+}: {
+  item: NetLegendItem
+  onRenameNet: (index: number, name: string) => void
+}) {
+  const [value, setValue] = useState(item.name)
+  return (
+    <Input
+      aria-label={`Net name ${item.name}`}
+      value={value}
+      className="h-8 min-w-0 flex-1"
+      onChange={(event) => setValue(event.target.value)}
+      onBlur={() => {
+        const next = value.trim()
+        if (!next || next === item.name) {
+          setValue(item.name)
+          return
+        }
+        onRenameNet(item.index, next)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
 
+export function TraceToolbar({ tool, draft, legend, onCancel, onRenameNet }: TraceToolbarProps) {
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <p className="text-sm leading-5 text-muted-foreground">
-          {tool === "select"
-            ? "Click a trace or a pin hole. Click empty board to clear the selection."
-            : draft
-              ? `Start is column ${draft.c + 1}, row ${draft.r + 1}. Click a hole on this row or column. A diagonal hole highlights, but it does not commit.`
-              : "Click a pin hole to start. Click a hole on the same row or column to lay a straight trace."}
-        </p>
-        {tool === "trace" && draft ? (
-          <Button type="button" variant="outline" className="mt-3 h-11 w-full" onClick={onCancel}>
-            Cancel trace
-          </Button>
-        ) : null}
-      </div>
-      <div>
-        <p className="text-sm font-medium">{netCount === 0 ? "No nets yet" : netLabel}</p>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">
-          A trace takes the color of its net. Spans that share a hole, including a crossing, connect.
-        </p>
-        {legend.length > 0 ? (
-          <ul className="mt-2 flex flex-wrap gap-2">
+      {tool === "trace" && draft ? (
+        <Button type="button" variant="outline" className="h-11 w-full" onClick={onCancel}>
+          Cancel trace
+        </Button>
+      ) : null}
+      <section aria-label="Nets" className="rounded-lg border bg-card p-3">
+        <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Nets</h2>
+        {legend.length === 0 ? (
+          <p className="mt-2 text-sm text-muted-foreground">No nets yet</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-2">
             {legend.map((item) => (
-              <li
-                key={item.colorKey}
-                className="flex items-center gap-1.5 rounded-full border bg-background px-2 py-1 text-xs"
-              >
+              <li key={item.colorKey} className="flex min-w-0 items-center gap-2">
                 <span
-                  className="size-2.5 rounded-full"
+                  className="size-2.5 shrink-0 rounded-full"
                   style={{ backgroundColor: item.color }}
                   aria-hidden
                 />
-                {item.name}
+                <NetNameField key={item.name} item={item} onRenameNet={onRenameNet} />
               </li>
             ))}
           </ul>
-        ) : null}
-      </div>
+        )}
+      </section>
     </div>
   )
 }

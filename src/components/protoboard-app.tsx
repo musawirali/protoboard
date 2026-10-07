@@ -93,6 +93,7 @@ export function ProtoboardApp() {
         colorKey,
         name: displayNetName(traces, assignment.colorKeys, assignment.labels, index),
         color: netColor(colorKey),
+        index,
       })
     })
     return [...items.values()]
@@ -220,9 +221,9 @@ export function ProtoboardApp() {
           <TraceToolbar
             tool={tool}
             draft={draft}
-            netCount={assignment.netCount}
             legend={legend}
             onCancel={() => setDraft(null)}
+            onRenameNet={renameNet}
           />
           <div className="mt-4">
             <PropertiesPanel
@@ -231,7 +232,6 @@ export function ProtoboardApp() {
               netForTrace={netAt}
               netForHole={netForHole}
               onRemoveTrace={removeTrace}
-              onRenameNet={renameNet}
             />
           </div>
         </aside>
