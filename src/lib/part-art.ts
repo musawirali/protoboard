@@ -395,8 +395,8 @@ export function headerLabelTop(ax: number, ay: number, bx: number, by: number, m
   if (!frame) return null
   const overhang = 8
   const half = frame.span / 2 + overhang
-  const y0 = male ? -16 : -8
-  const y1 = male ? -6 : 8
+  const y0 = male ? -22 : -8
+  const y1 = male ? 8 : 8
   let top = Infinity
   for (const lx of [-half, half]) {
     for (const ly of [y0, y1]) top = Math.min(top, worldOf(frame, lx, ly).y)
@@ -425,13 +425,23 @@ export function drawHeader(
   const length = span + overhang * 2
   const x0 = -length / 2
   if (male) {
-    const bodyY = -16
-    const bodyH = 10
+    // Local -y is up on a horizontal strip and left on a vertical strip.
+    const bodyH = 16
+    const bodyY = -bodyH / 2
+    const pinLen = 14
+    const pinY = bodyY - pinLen
     if (halo) {
-      roundBody(ctx, x0 - 2, bodyY - 3, length + 4, bodyH + 14, 3)
+      roundBody(ctx, x0 - 3, pinY - 3, length + 6, pinLen + bodyH + 6, 3)
       ctx.strokeStyle = halo
       ctx.lineWidth = 4
       ctx.stroke()
+    }
+    for (let index = 0; index < count; index++) {
+      const x = -span / 2 + index * PITCH
+      ctx.fillStyle = "#c9862a"
+      ctx.fillRect(x - 1.7, pinY, 3.4, pinLen)
+      ctx.fillStyle = "#f3d48a"
+      ctx.fillRect(x - 2.3, pinY, 4.6, 3.4)
     }
     roundBody(ctx, x0, bodyY, length, bodyH, 1.6)
     const plastic = ctx.createLinearGradient(0, bodyY, 0, bodyY + bodyH)
@@ -440,13 +450,9 @@ export function drawHeader(
     plastic.addColorStop(1, "#0c0d10")
     ctx.fillStyle = plastic
     ctx.fill()
-    for (let index = 0; index < count; index++) {
-      const x = -span / 2 + index * PITCH
-      ctx.fillStyle = "#c9862a"
-      ctx.fillRect(x - 2.1, bodyY + bodyH - 1, 4.2, 8)
-      ctx.fillStyle = "#f2d48a"
-      ctx.fillRect(x - 2.7, 2.4, 5.4, 5.6)
-    }
+    ctx.strokeStyle = "#4a4e57"
+    ctx.lineWidth = 0.8
+    ctx.stroke()
   } else {
     const bodyH = 18
     const bodyY = -bodyH / 2
