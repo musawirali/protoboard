@@ -1,6 +1,6 @@
 import { sameHole, type Hole } from "./board"
 
-export type ComponentKind = "resistor" | "capacitor" | "diode"
+export type ComponentKind = "resistor" | "capacitor" | "diode" | "led"
 
 export type PlacedPart = {
   readonly id: string

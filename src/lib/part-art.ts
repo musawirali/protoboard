@@ -34,12 +34,14 @@ export type CeramicMetrics = {
 }
 
 export type ElectrolyticMetrics = {
-  length: number
-  height: number
-  lip: number
-  stripeX: number
-  stripeW: number
-  plusX: number
+  radius: number
+  metalRadius: number
+  stripeHalfAngle: number
+}
+
+export type LedMetrics = {
+  radius: number
+  flatX: number
 }
 
 export function resistorMetrics(span: number, avoidCenter = false): ResistorMetrics {
@@ -73,19 +75,20 @@ export function ceramicMetrics(span: number): CeramicMetrics {
 }
 
 export function electrolyticMetrics(span: number): ElectrolyticMetrics {
-  const length = fitAlong(clamp(span * 0.58, 20, 36), span)
-  const height = clamp(length * 0.68, 13, 17)
-  const lip = Math.min(8, Math.max(6.2, length * 0.2))
-  const stripeW = Math.max(6.4, length * 0.24)
-  const stripeX = length / 2 - stripeW - 0.6
-  const plusX = -length / 2 + lip / 2
-  return { length, height, lip, stripeW, stripeX, plusX }
+  const radius = Math.min(clamp(span * 0.36, 10, 15.5), Math.max(7, (span - 8) / 2))
+  return { radius, metalRadius: radius * 0.52, stripeHalfAngle: 0.9 }
+}
+
+export function ledMetrics(span: number): LedMetrics {
+  const radius = Math.min(clamp(span * 0.38, 10, 16), Math.max(7, (span - 8) / 2))
+  return { radius, flatX: radius * 0.55 }
 }
 
 export function componentHitRadius(kind: ComponentKind, polarized: boolean | undefined, span: number) {
   if (kind === "resistor") return resistorMetrics(span).radius + 2
   if (kind === "diode") return diodeMetrics(span).radius + 2
-  if (kind === "capacitor" && polarized) return electrolyticMetrics(span).height / 2 + 2
+  if (kind === "led") return ledMetrics(span).radius + 1.5
+  if (kind === "capacitor" && polarized) return electrolyticMetrics(span).radius + 1.5
   return ceramicMetrics(span).radius + 1.5
 }
 
@@ -115,24 +118,6 @@ function drawLeads(ctx: CanvasRenderingContext2D, span: number, inset: number) {
   ctx.lineTo(span / 2, 0)
   ctx.strokeStyle = "#d5cfc3"
   ctx.lineWidth = 1.8
-  ctx.stroke()
-}
-
-function glyphPlus(ctx: CanvasRenderingContext2D, x: number, y: number, arm: number) {
-  ctx.beginPath()
-  ctx.moveTo(x - arm, y)
-  ctx.lineTo(x + arm, y)
-  ctx.moveTo(x, y - arm)
-  ctx.lineTo(x, y + arm)
-  ctx.lineWidth = Math.max(1.5, arm * 0.7)
-  ctx.stroke()
-}
-
-function glyphMinus(ctx: CanvasRenderingContext2D, x: number, y: number, arm: number) {
-  ctx.beginPath()
-  ctx.moveTo(x - arm, y)
-  ctx.lineTo(x + arm, y)
-  ctx.lineWidth = Math.max(1.8, arm * 0.85)
   ctx.stroke()
 }
 
@@ -229,45 +214,87 @@ function drawCeramic(ctx: CanvasRenderingContext2D, span: number, halo: string |
   ctx.strokeStyle = "rgba(92, 64, 32, 0.45)"
   ctx.lineWidth = 0.8
   ctx.stroke()
-  ctx.fillStyle = "#6a4c2c"
-  const mark = Math.max(2.4, radius * 0.42)
-  ctx.fillRect(-mark / 2, -0.9, mark, 1.5)
 }
 
 function drawElectrolytic(ctx: CanvasRenderingContext2D, span: number, halo: string | null) {
-  const { length, height, lip, stripeX, stripeW, plusX } = electrolyticMetrics(span)
-  const x = -length / 2
-  const y = -height / 2
+  const { radius, metalRadius, stripeHalfAngle } = electrolyticMetrics(span)
   if (halo) {
-    roundBody(ctx, x, y, length, height, 2.4)
+    ctx.beginPath()
+    ctx.arc(0, 0, radius, 0, Math.PI * 2)
     ctx.strokeStyle = halo
     ctx.lineWidth = 5
     ctx.stroke()
   }
-  drawLeads(ctx, span, length / 2)
-  const shell = ctx.createLinearGradient(0, y, 0, y + height)
-  shell.addColorStop(0, "#f5f6f7")
-  shell.addColorStop(0.45, "#c5cacf")
-  shell.addColorStop(1, "#8d949c")
-  roundBody(ctx, x, y, length, height, 2.4)
-  ctx.fillStyle = shell
+  drawLeads(ctx, span, radius)
+  const sleeve = ctx.createRadialGradient(-radius * 0.2, -radius * 0.28, radius * 0.15, 0, 0, radius)
+  sleeve.addColorStop(0, "#3a4252")
+  sleeve.addColorStop(1, "#141820")
+  ctx.beginPath()
+  ctx.arc(0, 0, radius, 0, Math.PI * 2)
+  ctx.fillStyle = sleeve
   ctx.fill()
-  ctx.strokeStyle = "#5e666e"
-  ctx.lineWidth = 0.9
+  ctx.lineWidth = 1
+  ctx.strokeStyle = "#0c0e14"
   ctx.stroke()
-  roundBody(ctx, x + lip, y + 0.45, length - lip - 0.35, height - 0.9, 1.8)
-  ctx.fillStyle = "#171a1f"
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.arc(0, 0, radius, -stripeHalfAngle, stripeHalfAngle)
+  ctx.closePath()
+  ctx.fillStyle = "#f4f6f8"
   ctx.fill()
-  ctx.save()
-  roundBody(ctx, x, y, length, height, 2.4)
-  ctx.clip()
-  ctx.fillStyle = "#f7f7f4"
-  ctx.fillRect(stripeX, y, stripeW, height)
-  ctx.restore()
-  ctx.strokeStyle = "#121418"
-  ctx.lineCap = "round"
-  glyphMinus(ctx, stripeX + stripeW / 2, 0, Math.min(stripeW * 0.32, height * 0.28))
-  glyphPlus(ctx, plusX, 0, Math.min(2.3, lip * 0.32))
+  const metal = ctx.createRadialGradient(-metalRadius * 0.28, -metalRadius * 0.34, metalRadius * 0.08, 0, 0, metalRadius)
+  metal.addColorStop(0, "#fbfcfc")
+  metal.addColorStop(0.55, "#c5ccd3")
+  metal.addColorStop(1, "#8e969e")
+  ctx.beginPath()
+  ctx.arc(0, 0, metalRadius, 0, Math.PI * 2)
+  ctx.fillStyle = metal
+  ctx.fill()
+  ctx.strokeStyle = "#667078"
+  ctx.lineWidth = 0.8
+  ctx.stroke()
+}
+
+function traceLed(ctx: CanvasRenderingContext2D, radius: number, flatX: number) {
+  const angle = Math.acos(clamp(flatX / radius, -1, 1))
+  ctx.beginPath()
+  ctx.arc(0, 0, radius, angle, Math.PI * 2 - angle)
+  ctx.closePath()
+}
+
+function drawLed(ctx: CanvasRenderingContext2D, span: number, halo: string | null) {
+  const { radius, flatX } = ledMetrics(span)
+  if (halo) {
+    traceLed(ctx, radius, flatX)
+    ctx.strokeStyle = halo
+    ctx.lineWidth = 5
+    ctx.stroke()
+  }
+  const flatY = Math.sin(Math.acos(clamp(flatX / radius, -1, 1))) * radius
+  ctx.beginPath()
+  ctx.moveTo(-span / 2, 0)
+  ctx.lineTo(-radius, 0)
+  ctx.moveTo(flatX, 0)
+  ctx.lineTo(span / 2, 0)
+  ctx.strokeStyle = "#d5cfc3"
+  ctx.lineWidth = 1.8
+  ctx.stroke()
+  const dome = ctx.createRadialGradient(-radius * 0.28, -radius * 0.32, radius * 0.08, 0, 0, radius)
+  dome.addColorStop(0, "#ffb1aa")
+  dome.addColorStop(0.42, "#ef3a2e")
+  dome.addColorStop(1, "#8d140f")
+  traceLed(ctx, radius, flatX)
+  ctx.fillStyle = dome
+  ctx.fill()
+  ctx.strokeStyle = "#6a100d"
+  ctx.lineWidth = 1.1
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(flatX, -flatY)
+  ctx.lineTo(flatX, flatY)
+  ctx.strokeStyle = "#4a0c0a"
+  ctx.lineWidth = 2.4
+  ctx.stroke()
 }
 
 export function drawComponent(
@@ -294,6 +321,7 @@ export function drawComponent(
   const avoidCenter = stepsX % 2 === 0 && stepsY % 2 === 0
   if (kind === "resistor") drawResistor(ctx, span, halo, avoidCenter)
   else if (kind === "diode") drawDiode(ctx, span, halo)
+  else if (kind === "led") drawLed(ctx, span, halo)
   else if (polarized) drawElectrolytic(ctx, span, halo)
   else drawCeramic(ctx, span, halo)
   ctx.restore()

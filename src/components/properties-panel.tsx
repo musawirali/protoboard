@@ -48,6 +48,7 @@ function NetName({ net }: { net: NetInfo | null }) {
 function partHeading(kind: PlacedPart["kind"]) {
   if (kind === "resistor") return "Selected resistor"
   if (kind === "capacitor") return "Selected capacitor"
+  if (kind === "led") return "Selected LED"
   return "Selected diode"
 }
 
@@ -74,7 +75,7 @@ export function PropertiesPanel({
       <section aria-label={heading} className="rounded-lg border bg-card p-3">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
         <dl className="mt-2 flex flex-col gap-1.5 text-sm">
-          {part.kind === "diode" ? (
+          {part.kind === "diode" || part.kind === "led" ? (
             <>
               <Row label="Anode">{holeLabel(part.a)}</Row>
               <Row label="Anode net"><NetName net={netForHole(part.a)} /></Row>

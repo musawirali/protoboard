@@ -3,6 +3,7 @@ import {
   ceramicMetrics,
   diodeMetrics,
   electrolyticMetrics,
+  ledMetrics,
   resistorMetrics,
 } from "./part-art"
 
@@ -25,9 +26,14 @@ describe("physical part metrics", () => {
       expect(diode.length).toBeLessThan(span - 4)
       expect(ceramic.radius).toBeGreaterThanOrEqual(8)
       expect(ceramic.radius * 2).toBeLessThan(span - 4)
-      expect(can.length).toBeGreaterThanOrEqual(16)
-      expect(can.height).toBeGreaterThan(can.length * 0.4)
-      expect(can.length).toBeLessThan(span - 4)
+      expect(can.radius).toBeGreaterThanOrEqual(9)
+      expect(can.radius * 2).toBeLessThan(span - 4)
+      expect(can.metalRadius).toBeLessThan(can.radius * 0.7)
+      const led = ledMetrics(span)
+      expect(led.radius).toBeGreaterThanOrEqual(9)
+      expect(led.radius * 2).toBeLessThan(span - 4)
+      expect(led.flatX).toBeGreaterThan(0)
+      expect(led.flatX).toBeLessThan(led.radius)
     }
   })
 
@@ -50,13 +56,14 @@ describe("physical part metrics", () => {
     }
   })
 
-  it("puts the electrolytic stripe toward the second pin and the plus toward the first", () => {
+  it("puts the electrolytic stripe on the rim toward the second pin", () => {
     for (const span of spans) {
       const can = electrolyticMetrics(span)
-      expect(can.plusX).toBeLessThan(-1)
-      expect(can.stripeX).toBeGreaterThan(0)
-      expect(can.stripeX + can.stripeW).toBeGreaterThan(can.length / 2 - 1.2)
-      expect(can.plusX).toBeLessThan(-can.length / 2 + can.lip)
+      expect(can.stripeHalfAngle).toBeGreaterThan(0.4)
+      expect(can.stripeHalfAngle).toBeLessThan(Math.PI / 2)
+      expect(can.metalRadius).toBeGreaterThan(0)
+      const stripeAtRim = can.radius * Math.cos(can.stripeHalfAngle * 0.5)
+      expect(stripeAtRim).toBeGreaterThan(can.metalRadius)
     }
   })
 })

@@ -806,7 +806,7 @@ export function ProtoboardCanvas({
           tool === "trace"
             ? "Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
             : isPartTool(tool)
-              ? `Protoboard pin grid. ${tool[0].toUpperCase()}${tool.slice(1)} is selected. Click two pin holes within 4 steps. Drag empty board to pan.`
+              ? `Protoboard pin grid. ${tool === "led" ? "LED" : `${tool[0].toUpperCase()}${tool.slice(1)}`} is selected. Click two pin holes within 4 steps. Drag empty board to pan.`
               : "Protoboard pin grid. Select is active. Click a trace, component, or pin hole. Click empty board to clear the selection. Drag empty board to pan."
         }
       />
