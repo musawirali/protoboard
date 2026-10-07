@@ -1,5 +1,5 @@
 import type { Trace } from "./board"
-import type { PlacedPart } from "./parts"
+import type { IcConfig, PlacedPart } from "./parts"
 
 export const HISTORY_LIMIT = 20
 
@@ -21,6 +21,7 @@ export type BoardEdit =
   | { type: "polarize"; id: string; from: boolean; to: boolean }
   | { type: "partName"; id: string; from: string; to: string }
   | { type: "partValue"; id: string; from: string; to: string }
+  | { type: "icConfig"; id: string; from: IcConfig; to: IcConfig }
 
 export type BoardSnapshot = {
   traces: Trace[]
@@ -93,6 +94,16 @@ export function applyBoardEdit(
       components: state.components.map((part) => {
         if (part.id !== edit.id) return part
         return edit.type === "partName" ? { ...part, name: next } : { ...part, value: next }
+      }),
+    }
+  }
+  if (edit.type === "icConfig") {
+    const next = direction === "undo" ? edit.from : edit.to
+    return {
+      traces: state.traces.slice(),
+      components: state.components.map((part) => {
+        if (part.id !== edit.id) return part
+        return { ...part, ...next, pinLabels: [...next.pinLabels] }
       }),
     }
   }

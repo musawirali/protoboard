@@ -11,8 +11,23 @@ import { UndoBar } from "@/components/undo-bar"
 import { canCommit, holesOnSpan, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
 import { assignNets, displayNetName, netColor } from "@/lib/nets"
-import { canPlacePart, componentNameTaken, holeOccupied, nextComponentName, type PlacedPart } from "@/lib/parts"
-import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
+import {
+  canPlaceHeader,
+  canPlacePart,
+  componentNameTaken,
+  holeOccupied,
+  IC_DEFAULT_DISTANCE,
+  IC_DEFAULT_PINS,
+  icFits,
+  nextComponentName,
+  readIcConfig,
+  validPinCount,
+  validRailDistance,
+  type IcConfig,
+  type IcRotation,
+  type PlacedPart,
+} from "@/lib/parts"
+import { isAxialTool, isHeaderTool, type Selection, type ToolName } from "@/lib/selection"
 
 function selectionStillThere(
   selection: Selection | null,
@@ -197,6 +212,62 @@ export function ProtoboardApp() {
     commit({ type: "partValue", id, from: part.value, to: trimmed })
   }
 
+  function commitIcConfig(id: string, next: IcConfig) {
+    if (!board) return false
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.kind !== "ic") return false
+    const current = readIcConfig(part)
+    const same =
+      current.pinCount === next.pinCount &&
+      current.railDistance === next.railDistance &&
+      current.rotation === next.rotation &&
+      current.pinLabels.every((label, index) => label === next.pinLabels[index])
+    if (same) return true
+    if (!icFits(board.cols, board.rows, parts, part.a, next, id)) return false
+    commit({ type: "icConfig", id, from: current, to: next })
+    return true
+  }
+
+  function setIcPinCount(id: string, raw: string) {
+    const pinCount = Number(raw)
+    if (!validPinCount(pinCount)) return false
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.kind !== "ic") return false
+    const current = readIcConfig(part)
+    if (pinCount === current.pinCount) return false
+    const pinLabels = Array.from({ length: pinCount }, (_, index) => current.pinLabels[index] ?? "")
+    return commitIcConfig(id, { ...current, pinCount, pinLabels })
+  }
+
+  function setIcDistance(id: string, raw: string) {
+    const railDistance = Number(raw)
+    if (!validRailDistance(railDistance)) return false
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.kind !== "ic") return false
+    const current = readIcConfig(part)
+    if (railDistance === current.railDistance) return false
+    return commitIcConfig(id, { ...current, railDistance })
+  }
+
+  function rotateIc(id: string) {
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.kind !== "ic") return false
+    const current = readIcConfig(part)
+    const rotation = ((current.rotation + 90) % 360) as IcRotation
+    return commitIcConfig(id, { ...current, rotation })
+  }
+
+  function setIcPinLabel(id: string, pinNumber: number, label: string) {
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.kind !== "ic") return
+    const current = readIcConfig(part)
+    const pinLabels = [...current.pinLabels]
+    const index = pinNumber - 1
+    if (index < 0 || index >= pinLabels.length || pinLabels[index] === label) return
+    pinLabels[index] = label
+    commitIcConfig(id, { ...current, pinLabels })
+  }
+
   function setPolarized(id: string, polarized: boolean) {
     const part = parts.find((item) => item.id === id)
     if (!part || part.kind !== "capacitor") return
@@ -219,13 +290,39 @@ export function ProtoboardApp() {
       })
       return
     }
-    if (!isPartTool(tool)) return
-    if (holeOccupied(parts, hole)) return
+    if (tool === "ic") {
+      if (!board) return
+      const config = { pinCount: IC_DEFAULT_PINS, railDistance: IC_DEFAULT_DISTANCE, rotation: 0 as const }
+      if (!icFits(board.cols, board.rows, parts, hole, config)) return
+      commit({
+        type: "place",
+        index: parts.length,
+        component: {
+          id: crypto.randomUUID(),
+          kind: "ic",
+          name: nextComponentName(parts, "ic"),
+          value: "",
+          a: hole,
+          b: hole,
+          pinCount: config.pinCount,
+          railDistance: config.railDistance,
+          rotation: config.rotation,
+          pinLabels: Array.from({ length: config.pinCount }, () => ""),
+        },
+      })
+      return
+    }
+    if (!isAxialTool(tool) && !isHeaderTool(tool)) return
     if (!draft) {
+      if (holeOccupied(parts, hole)) return
       setDraft(hole)
       return
     }
-    if (!canPlacePart(draft, hole)) return
+    if (isHeaderTool(tool)) {
+      if (!canPlaceHeader(parts, draft, hole)) return
+    } else if (!canPlacePart(draft, hole) || holeOccupied(parts, hole)) {
+      return
+    }
     commit({
       type: "place",
       index: parts.length,
@@ -270,7 +367,7 @@ export function ProtoboardApp() {
             colorKeys={assignment.colorKeys}
             parts={parts}
             tool={tool}
-            draftStart={tool === "trace" || isPartTool(tool) ? draft : null}
+            draftStart={tool === "trace" || isAxialTool(tool) || isHeaderTool(tool) ? draft : null}
             selectedTraceId={selection?.type === "trace" ? selection.id : null}
             selectedPartId={selection?.type === "component" ? selection.id : null}
             selectedHole={selection?.type === "hole" ? selection.hole : null}
@@ -299,6 +396,10 @@ export function ProtoboardApp() {
               onPolarize={setPolarized}
               onRenamePart={renamePart}
               onValuePart={setPartValue}
+              onIcPinCount={setIcPinCount}
+              onIcDistance={setIcDistance}
+              onIcRotate={rotateIc}
+              onIcPinLabel={setIcPinLabel}
             />
           </div>
         </aside>

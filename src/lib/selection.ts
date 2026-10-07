@@ -1,10 +1,18 @@
 import type { Hole } from "./board"
-import type { ComponentKind } from "./parts"
+import { isAxialKind, isHeaderKind, type ComponentKind } from "./parts"
 
 export type ToolName = "select" | "trace" | ComponentKind
 
+export function isAxialTool(tool: ToolName): tool is "resistor" | "capacitor" | "diode" | "led" {
+  return tool !== "select" && tool !== "trace" && isAxialKind(tool)
+}
+
+export function isHeaderTool(tool: ToolName): tool is "male-header" | "female-header" {
+  return tool !== "select" && tool !== "trace" && isHeaderKind(tool)
+}
+
 export function isPartTool(tool: ToolName): tool is ComponentKind {
-  return tool === "resistor" || tool === "capacitor" || tool === "diode" || tool === "led"
+  return isAxialTool(tool) || isHeaderTool(tool) || tool === "ic"
 }
 
 export type Selection =

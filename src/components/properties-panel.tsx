@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { holesOnSpan, type Hole, type Trace } from "@/lib/board"
-import type { PlacedPart } from "@/lib/parts"
+import { icPins, isAxialKind, isHeaderKind, readIcConfig, type PlacedPart } from "@/lib/parts"
 import type { Selection } from "@/lib/selection"
 
 type NetInfo = {
@@ -23,6 +23,10 @@ type PropertiesPanelProps = {
   onPolarize: (id: string, polarized: boolean) => void
   onRenamePart: (id: string, name: string) => boolean
   onValuePart: (id: string, value: string) => void
+  onIcPinCount: (id: string, raw: string) => boolean
+  onIcDistance: (id: string, raw: string) => boolean
+  onIcRotate: (id: string) => boolean
+  onIcPinLabel: (id: string, pinNumber: number, label: string) => void
 }
 
 function holeLabel(hole: Hole) {
@@ -88,6 +92,9 @@ function partHeading(kind: PlacedPart["kind"]) {
   if (kind === "resistor") return "Selected resistor"
   if (kind === "capacitor") return "Selected capacitor"
   if (kind === "led") return "Selected LED"
+  if (kind === "male-header") return "Selected male header"
+  if (kind === "female-header") return "Selected female header"
+  if (kind === "ic") return "Selected IC"
   return "Selected diode"
 }
 
@@ -102,6 +109,10 @@ export function PropertiesPanel({
   onPolarize,
   onRenamePart,
   onValuePart,
+  onIcPinCount,
+  onIcDistance,
+  onIcRotate,
+  onIcPinLabel,
 }: PropertiesPanelProps) {
   const selectedTrace =
     selection?.type === "trace" ? traces.find((trace) => trace.id === selection.id) : undefined
@@ -112,6 +123,112 @@ export function PropertiesPanel({
     const part = parts.find((item) => item.id === selection.id)
     if (!part) return null
     const heading = partHeading(part.kind)
+    if (isHeaderKind(part.kind)) {
+      const holes = holesOnSpan(part.a, part.b)
+      return (
+        <section aria-label={heading} className="rounded-lg border bg-card p-3">
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
+          <dl className="mt-2 flex flex-col gap-1.5 text-sm">
+            <Row label="Direction">{part.a.r === part.b.r ? "Horizontal" : "Vertical"}</Row>
+            <Row label="Start">{holeLabel(part.a)}</Row>
+            <Row label="End">{holeLabel(part.b)}</Row>
+            <Row label="Holes">{holes.length}</Row>
+          </dl>
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Name</span>
+            <PartTextField
+              key={`${part.id}:name:${part.name}`}
+              label="Name"
+              committed={part.name}
+              rejectEmpty
+              onCommit={(next) => onRenamePart(part.id, next)}
+            />
+          </label>
+          <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
+            Remove
+          </Button>
+        </section>
+      )
+    }
+    if (part.kind === "ic") {
+      const config = readIcConfig(part)
+      const pins = icPins(part.a, config.pinCount, config.railDistance, config.rotation) ?? []
+      return (
+        <section aria-label={heading} className="rounded-lg border bg-card p-3">
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Name</span>
+            <PartTextField
+              key={`${part.id}:name:${part.name}`}
+              label="Name"
+              committed={part.name}
+              rejectEmpty
+              onCommit={(next) => onRenamePart(part.id, next)}
+            />
+          </label>
+          <div className="mt-3 flex flex-col gap-2">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Pin count</span>
+              <PartTextField
+                key={`${part.id}:pins:${config.pinCount}`}
+                label="Pin count"
+                committed={String(config.pinCount)}
+                rejectEmpty
+                onCommit={(next) => onIcPinCount(part.id, next)}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Rail distance</span>
+              <PartTextField
+                key={`${part.id}:distance:${config.railDistance}`}
+                label="Rail distance"
+                committed={String(config.railDistance)}
+                rejectEmpty
+                onCommit={(next) => onIcDistance(part.id, next)}
+              />
+            </label>
+          </div>
+          <div className="mt-3 flex items-center justify-between gap-3 text-sm">
+            <span>Rotation {config.rotation}°</span>
+            <Button type="button" variant="outline" className="h-9" aria-label="Rotate 90 degrees" onClick={() => onIcRotate(part.id)}>
+              Rotate 90°
+            </Button>
+          </div>
+          <div className="mt-3">
+            <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Pins</h3>
+            <ul className="mt-2 flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
+              {pins.map((pin) => {
+                const label = config.pinLabels[pin.number - 1] ?? ""
+                const net = netForHole(pin.hole)
+                return (
+                  <li key={pin.number} className="flex items-center gap-2">
+                    <span className="w-6 shrink-0 text-sm tabular-nums">{pin.number}</span>
+                    <div className="min-w-0 flex-1">
+                      <PartTextField
+                        key={`${part.id}:pin:${pin.number}:${label}`}
+                        label={`Pin ${pin.number} label`}
+                        committed={label}
+                        rejectEmpty={false}
+                        onCommit={(next) => {
+                          onIcPinLabel(part.id, pin.number, next)
+                          return true
+                        }}
+                      />
+                    </div>
+                    <span className="w-16 shrink-0 truncate text-xs text-muted-foreground">
+                      {net ? net.name : "On no net"}
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+          <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
+            Remove
+          </Button>
+        </section>
+      )
+    }
     return (
       <section aria-label={heading} className="rounded-lg border bg-card p-3">
         <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
@@ -143,19 +260,21 @@ export function PropertiesPanel({
               onCommit={(next) => onRenamePart(part.id, next)}
             />
           </label>
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-muted-foreground">Value</span>
-            <PartTextField
-              key={`${part.id}:value:${part.value}`}
-              label="Value"
-              committed={part.value}
-              rejectEmpty={false}
-              onCommit={(next) => {
-                onValuePart(part.id, next)
-                return true
-              }}
-            />
-          </label>
+          {isAxialKind(part.kind) ? (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-muted-foreground">Value</span>
+              <PartTextField
+                key={`${part.id}:value:${part.value}`}
+                label="Value"
+                committed={part.value}
+                rejectEmpty={false}
+                onCommit={(next) => {
+                  onValuePart(part.id, next)
+                  return true
+                }}
+              />
+            </label>
+          ) : null}
         </div>
         {part.kind === "capacitor" ? (
           <label className="mt-3 flex items-center justify-between gap-3 text-sm">

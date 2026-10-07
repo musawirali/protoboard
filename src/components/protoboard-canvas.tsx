@@ -4,9 +4,28 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Button } from "@/components/ui/button"
 import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
-import { componentHitRadius, componentSilhouette, drawComponent } from "@/lib/part-art"
-import { canPlacePart, holeOccupied, PART_REACH, type PlacedPart } from "@/lib/parts"
-import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
+import {
+  componentHitRadius,
+  componentSilhouette,
+  drawComponent,
+  drawHeader,
+  drawIc,
+  headerLabelTop,
+  icLabelTop,
+} from "@/lib/part-art"
+import {
+  canPlaceHeader,
+  canPlacePart,
+  holeOccupied,
+  icBodyContains,
+  icDirections,
+  icFits,
+  icPins,
+  PART_REACH,
+  readIcConfig,
+  type PlacedPart,
+} from "@/lib/parts"
+import { isAxialTool, isHeaderTool, isPartTool, type Selection, type ToolName } from "@/lib/selection"
 
 const PITCH = 28
 const MARGIN = 36
@@ -69,6 +88,30 @@ function holeXY(c: number, r: number) {
   return { x: MARGIN + c * PITCH, y: MARGIN + r * PITCH }
 }
 
+function canvasLabel(tool: ToolName) {
+  if (tool === "select") {
+    return "Protoboard pin grid. Select is active. Click a trace, component, or pin hole. Click empty board to clear the selection. Drag empty board to pan."
+  }
+  if (tool === "trace") {
+    return "Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
+  }
+  if (tool === "ic") {
+    return "Protoboard pin grid. IC is selected. Click a pin hole to place pin 1. Drag empty board to pan."
+  }
+  const name =
+    tool === "led"
+      ? "LED"
+      : tool === "male-header"
+        ? "Male header"
+        : tool === "female-header"
+          ? "Female header"
+          : `${tool[0].toUpperCase()}${tool.slice(1)}`
+  if (isHeaderTool(tool)) {
+    return `Protoboard pin grid. ${name} is selected. Click two pin holes on the same row or column. Drag empty board to pan.`
+  }
+  return `Protoboard pin grid. ${name} is selected. Click two pin holes within 4 steps. Drag empty board to pan.`
+}
+
 function roundRect(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -108,7 +151,36 @@ function strokeLane(
 function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null) {
   const from = holeXY(part.a.c, part.a.r)
   const to = holeXY(part.b.c, part.b.r)
+  if (part.kind === "male-header" || part.kind === "female-header") {
+    drawHeader(ctx, part.kind === "male-header", from.x, from.y, to.x, to.y, halo)
+    return
+  }
+  if (part.kind === "ic") {
+    const config = readIcConfig(part)
+    drawIc(ctx, from.x, from.y, config.pinCount, config.railDistance, config.rotation, halo)
+    return
+  }
   drawComponent(ctx, part.kind, part.polarized, from.x, from.y, to.x, to.y, halo)
+}
+
+function paintUprightText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  baseline: CanvasTextBaseline,
+  align: CanvasTextAlign,
+) {
+  ctx.font = `600 ${size}px var(--font-geist-sans), sans-serif`
+  ctx.textAlign = align
+  ctx.textBaseline = baseline
+  ctx.lineJoin = "round"
+  ctx.lineWidth = 3
+  ctx.strokeStyle = "rgba(7, 32, 18, 0.92)"
+  ctx.strokeText(text, x, y)
+  ctx.fillStyle = "#f6f1e2"
+  ctx.fillText(text, x, y)
 }
 
 function distanceToSegment(
@@ -145,11 +217,28 @@ function hitTraceIndex(worldX: number, worldY: number, traces: readonly Trace[])
 function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
   let best: { part: PlacedPart; distance: number } | null = null
   for (const part of parts) {
+    if (part.kind === "ic") {
+      const config = readIcConfig(part)
+      const anchor = holeXY(part.a.c, part.a.r)
+      const inside = icBodyContains(
+        part.a,
+        config.pinCount,
+        config.railDistance,
+        config.rotation,
+        (worldX - anchor.x) / PITCH,
+        (worldY - anchor.y) / PITCH,
+      )
+      if (inside && (best == null || 0 < best.distance)) best = { part, distance: 0 }
+      continue
+    }
     const from = holeXY(part.a.c, part.a.r)
     const to = holeXY(part.b.c, part.b.r)
     const span = Math.hypot(to.x - from.x, to.y - from.y)
     const distance = distanceToSegment(worldX, worldY, from.x, from.y, to.x, to.y)
-    const limit = componentHitRadius(part.kind, part.polarized, span)
+    const limit =
+      part.kind === "male-header" || part.kind === "female-header"
+        ? 14
+        : componentHitRadius(part.kind, part.polarized, span)
     if (distance <= limit && (best == null || distance < best.distance)) best = { part, distance }
   }
   return best?.part
@@ -366,16 +455,35 @@ export function ProtoboardCanvas({
       const halo = selected ? "#fffef6" : hovered ? "rgba(255,255,255,0.72)" : null
       drawPartSymbol(ctx, part, halo)
     }
-    const previewLegal =
-      isPartTool(model.tool) &&
+    const axialPreview =
+      isAxialTool(model.tool) &&
       model.draftStart != null &&
       hover != null &&
       canPlacePart(model.draftStart, hover) &&
       !holeOccupied(model.parts, hover)
-    if (previewLegal && model.draftStart && hover && isPartTool(model.tool)) {
+    const headerPreview =
+      isHeaderTool(model.tool) && model.draftStart != null && hover != null && canPlaceHeader(model.parts, model.draftStart, hover)
+    if ((axialPreview || headerPreview) && model.draftStart && hover && model.tool !== "select" && model.tool !== "trace") {
       drawPartSymbol(
         ctx,
         { id: "preview", kind: model.tool, name: "", value: "", a: model.draftStart, b: hover },
+        null,
+      )
+    }
+    if (model.tool === "ic" && hover && icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })) {
+      drawPartSymbol(
+        ctx,
+        {
+          id: "preview",
+          kind: "ic",
+          name: "",
+          value: "",
+          a: hover,
+          b: hover,
+          pinCount: 8,
+          railDistance: 0,
+          rotation: 0,
+        },
         null,
       )
     }
@@ -423,8 +531,8 @@ export function ProtoboardCanvas({
           4,
         )
       }
-    } else if (isPartTool(model.tool)) {
-      if (model.draftStart) {
+    } else if (isAxialTool(model.tool) || isHeaderTool(model.tool) || model.tool === "ic") {
+      if (model.draftStart && isAxialTool(model.tool)) {
         const start = model.draftStart
         for (let row = Math.max(0, start.r - PART_REACH); row <= Math.min(model.rows - 1, start.r + PART_REACH); row++) {
           for (let col = Math.max(0, start.c - PART_REACH); col <= Math.min(model.cols - 1, start.c + PART_REACH); col++) {
@@ -434,15 +542,16 @@ export function ProtoboardCanvas({
             markHole(hole, "rgba(186, 230, 253, 0.28)", "rgba(224, 242, 254, 0.8)", 8, 1.5)
           }
         }
-        if (!hover || !sameHole(hover, start)) {
-          markHole(start, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
-        }
+      }
+      if (model.draftStart && (isAxialTool(model.tool) || isHeaderTool(model.tool)) && (!hover || !sameHole(hover, model.draftStart))) {
+        markHole(model.draftStart, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
       }
       if (hover) {
-        const legal =
-          model.draftStart != null &&
-          canPlacePart(model.draftStart, hover) &&
-          !holeOccupied(model.parts, hover)
+        const legal = isHeaderTool(model.tool)
+          ? model.draftStart != null && canPlaceHeader(model.parts, model.draftStart, hover)
+          : model.tool === "ic"
+            ? icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })
+            : model.draftStart != null && canPlacePart(model.draftStart, hover) && !holeOccupied(model.parts, hover)
         markHole(
           hover,
           legal ? "rgba(255, 228, 64, 0.96)" : "rgba(255,255,255,0.45)",
@@ -459,31 +568,55 @@ export function ProtoboardCanvas({
     }
 
     ctx.save()
-    ctx.font = "600 12px var(--font-geist-sans), sans-serif"
-    ctx.textAlign = "center"
-    ctx.textBaseline = "bottom"
-    ctx.lineJoin = "round"
     for (const part of model.parts) {
+      if (part.kind === "ic") {
+        const config = readIcConfig(part)
+        const anchor = holeXY(part.a.c, part.a.r)
+        const pins = icPins(part.a, config.pinCount, config.railDistance, config.rotation) ?? []
+        const perRail = config.pinCount / 2
+        const { across } = icDirections(config.rotation)
+        for (const pin of pins) {
+          const at = holeXY(pin.hole.c, pin.hole.r)
+          const sign = pin.number > perRail ? 1 : -1
+          const ox = across.dc * sign
+          const oy = across.dr * sign
+          const align: CanvasTextAlign = ox < 0 ? "right" : ox > 0 ? "left" : "center"
+          const baseline: CanvasTextBaseline = oy < 0 ? "bottom" : oy > 0 ? "top" : "middle"
+          paintUprightText(ctx, String(pin.number), at.x + ox * 12, at.y + oy * 12, 10, baseline, align)
+          const pinLabel = config.pinLabels[pin.number - 1]
+          if (pinLabel) {
+            paintUprightText(ctx, pinLabel, at.x + ox * 26, at.y + oy * 26, 10, baseline, align)
+          }
+        }
+        if (part.name) {
+          const top = icLabelTop(anchor.x, anchor.y, config.pinCount, config.railDistance, config.rotation)
+          paintUprightText(ctx, part.name, top.x, top.y - 8, 12, "bottom", "center")
+        }
+        continue
+      }
       if (!part.name) continue
       const from = holeXY(part.a.c, part.a.r)
       const to = holeXY(part.b.c, part.b.r)
-      const span = Math.hypot(to.x - from.x, to.y - from.y)
-      const midX = (from.x + to.x) / 2
-      const midY = (from.y + to.y) / 2
-      const { along, across } = componentSilhouette(part.kind, part.polarized, span)
-      const angle = Math.atan2(to.y - from.y, to.x - from.x)
-      const bodyTop = midY - Math.hypot(along * Math.sin(angle), across * Math.cos(angle))
+      let midX = (from.x + to.x) / 2
+      let topY = Math.min(from.y, to.y)
+      if (part.kind === "male-header" || part.kind === "female-header") {
+        const top = headerLabelTop(from.x, from.y, to.x, to.y, part.kind === "male-header")
+        if (!top) continue
+        midX = top.x
+        topY = top.y
+      } else {
+        const span = Math.hypot(to.x - from.x, to.y - from.y)
+        const midY = (from.y + to.y) / 2
+        const { along, across } = componentSilhouette(part.kind, part.polarized, span)
+        const angle = Math.atan2(to.y - from.y, to.x - from.x)
+        const bodyTop = midY - Math.hypot(along * Math.sin(angle), across * Math.cos(angle))
+        topY = Math.min(bodyTop, from.y, to.y)
+      }
       const lines = part.value ? [part.name, part.value] : [part.name]
       const lineHeight = 13
-      // Stroke extends below the baseline; keep that ink off the body and leads.
-      let baseline = Math.min(bodyTop, from.y, to.y) - 8
+      let baseline = topY - 8
       for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const line = lines[index]
-        ctx.lineWidth = 3
-        ctx.strokeStyle = "rgba(7, 32, 18, 0.92)"
-        ctx.strokeText(line, midX, baseline)
-        ctx.fillStyle = "#f6f1e2"
-        ctx.fillText(line, midX, baseline)
+        paintUprightText(ctx, lines[index], midX, baseline, 12, "bottom", "center")
         baseline -= lineHeight
       }
     }
@@ -572,19 +705,23 @@ export function ProtoboardCanvas({
       const model = modelRef.current
       const draft = model.draftStart
       const offAxis =
-        model.tool === "trace" &&
         hole != null &&
         draft != null &&
         !sameHole(draft, hole) &&
-        !canCommit(draft, hole)
-      const partNote =
-        isPartTool(model.tool) && hole != null && draft != null && !sameHole(draft, hole)
-          ? holeOccupied(model.parts, hole)
-            ? " — pin in use"
-            : canPlacePart(draft, hole)
-              ? ""
-              : " — out of reach"
-          : ""
+        !canCommit(draft, hole) &&
+        (model.tool === "trace" || isHeaderTool(model.tool))
+      let partNote = ""
+      if (isAxialTool(model.tool) && hole != null && draft != null && !sameHole(draft, hole)) {
+        partNote = holeOccupied(model.parts, hole)
+          ? " — pin in use"
+          : canPlacePart(draft, hole)
+            ? ""
+            : " — out of reach"
+      } else if (isHeaderTool(model.tool) && hole != null && draft != null && !sameHole(draft, hole) && canCommit(draft, hole)) {
+        partNote = canPlaceHeader(model.parts, draft, hole) ? "" : " — pin in use"
+      } else if (model.tool === "ic" && hole != null && !icFits(model.cols, model.rows, model.parts, hole, { pinCount: 8, railDistance: 0, rotation: 0 })) {
+        partNote = " — does not fit"
+      }
       setStatus(
         hole
           ? offAxis
@@ -837,13 +974,7 @@ export function ProtoboardCanvas({
         ref={canvasRef}
         className="h-full w-full touch-none"
         style={{ cursor: tool === "select" ? "default" : "crosshair" }}
-        aria-label={
-          tool === "trace"
-            ? "Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
-            : isPartTool(tool)
-              ? `Protoboard pin grid. ${tool === "led" ? "LED" : `${tool[0].toUpperCase()}${tool.slice(1)}`} is selected. Click two pin holes within 4 steps. Drag empty board to pan.`
-              : "Protoboard pin grid. Select is active. Click a trace, component, or pin hole. Click empty board to clear the selection. Drag empty board to pan."
-        }
+        aria-label={canvasLabel(tool)}
       />
       <div className="pointer-events-none absolute inset-0">
         <p className="absolute bottom-3 left-3 max-w-[calc(50%-4.5rem)] rounded-md bg-black/60 px-2 py-1 text-xs text-white">

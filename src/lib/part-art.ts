@@ -1,4 +1,4 @@
-import type { ComponentKind } from "./parts"
+import { icDirections, type ComponentKind, type IcRotation } from "./parts"
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -87,6 +87,8 @@ export function ledMetrics(span: number): LedMetrics {
 
 /** Half-size of the body along the leads and across them, in board pixels. */
 export function componentSilhouette(kind: ComponentKind, polarized: boolean | undefined, span: number) {
+  if (kind === "male-header" || kind === "female-header") return { along: span / 2, across: 12 }
+  if (kind === "ic") return { along: span / 2, across: 12 }
   if (kind === "resistor") {
     const body = resistorMetrics(span)
     return { along: body.length / 2, across: body.radius }
@@ -108,6 +110,7 @@ export function componentSilhouette(kind: ComponentKind, polarized: boolean | un
 }
 
 export function componentHitRadius(kind: ComponentKind, polarized: boolean | undefined, span: number) {
+  if (kind === "male-header" || kind === "female-header" || kind === "ic") return 14
   if (kind === "resistor") return resistorMetrics(span).radius + 2
   if (kind === "diode") return diodeMetrics(span).radius + 2
   if (kind === "led") return ledMetrics(span).radius + 1.5
@@ -333,7 +336,7 @@ export function drawComponent(
   const dx = bx - ax
   const dy = by - ay
   const span = Math.hypot(dx, dy)
-  if (span < 1) return
+  if (span < 1 || kind === "male-header" || kind === "female-header" || kind === "ic") return
   ctx.save()
   ctx.translate((ax + bx) / 2, (ay + by) / 2)
   ctx.rotate(Math.atan2(dy, dx))
@@ -347,5 +350,216 @@ export function drawComponent(
   else if (kind === "led") drawLed(ctx, span, halo)
   else if (polarized) drawElectrolytic(ctx, span, halo)
   else drawCeramic(ctx, span, halo)
+  ctx.restore()
+}
+
+const PITCH = 28
+
+export type HeaderFrame = {
+  ux: number
+  uy: number
+  px: number
+  py: number
+  span: number
+  midX: number
+  midY: number
+}
+
+/** +x runs from the start hole to the end hole. +y is the pin side, biased downward on screen. */
+export function headerFrame(ax: number, ay: number, bx: number, by: number): HeaderFrame | null {
+  const dx = bx - ax
+  const dy = by - ay
+  const span = Math.hypot(dx, dy)
+  if (span < 1) return null
+  const ux = dx / span
+  const uy = dy / span
+  let px = -uy
+  let py = ux
+  if (py < 0 || (py === 0 && px < 0)) {
+    px = -px
+    py = -py
+  }
+  return { ux, uy, px, py, span, midX: (ax + bx) / 2, midY: (ay + by) / 2 }
+}
+
+function worldOf(frame: HeaderFrame, lx: number, ly: number) {
+  return {
+    x: frame.midX + lx * frame.ux + ly * frame.px,
+    y: frame.midY + lx * frame.uy + ly * frame.py,
+  }
+}
+
+/** Top edge of the strip in screen space, used to park the name above the body. */
+export function headerLabelTop(ax: number, ay: number, bx: number, by: number, male: boolean) {
+  const frame = headerFrame(ax, ay, bx, by)
+  if (!frame) return null
+  const overhang = 8
+  const half = frame.span / 2 + overhang
+  const y0 = male ? -16 : -8
+  const y1 = male ? -6 : 8
+  let top = Infinity
+  for (const lx of [-half, half]) {
+    for (const ly of [y0, y1]) top = Math.min(top, worldOf(frame, lx, ly).y)
+  }
+  return { x: frame.midX, y: Math.min(top, ay, by) }
+}
+
+export function drawHeader(
+  ctx: CanvasRenderingContext2D,
+  male: boolean,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  halo: string | null,
+) {
+  const frame = headerFrame(ax, ay, bx, by)
+  if (!frame) return
+  const { ux, uy, px, py, span, midX, midY } = frame
+  const count = Math.round(span / PITCH) + 1
+  ctx.save()
+  ctx.translate(midX, midY)
+  ctx.transform(ux, uy, px, py, 0, 0)
+  ctx.lineJoin = "round"
+  const overhang = 8
+  const length = span + overhang * 2
+  const x0 = -length / 2
+  if (male) {
+    const bodyY = -16
+    const bodyH = 10
+    if (halo) {
+      roundBody(ctx, x0 - 2, bodyY - 3, length + 4, bodyH + 14, 3)
+      ctx.strokeStyle = halo
+      ctx.lineWidth = 4
+      ctx.stroke()
+    }
+    roundBody(ctx, x0, bodyY, length, bodyH, 1.6)
+    const plastic = ctx.createLinearGradient(0, bodyY, 0, bodyY + bodyH)
+    plastic.addColorStop(0, "#3a3d44")
+    plastic.addColorStop(0.45, "#1c1e24")
+    plastic.addColorStop(1, "#0c0d10")
+    ctx.fillStyle = plastic
+    ctx.fill()
+    for (let index = 0; index < count; index++) {
+      const x = -span / 2 + index * PITCH
+      ctx.fillStyle = "#c9862a"
+      ctx.fillRect(x - 2.1, bodyY + bodyH - 1, 4.2, 8)
+      ctx.fillStyle = "#f2d48a"
+      ctx.fillRect(x - 2.7, 2.4, 5.4, 5.6)
+    }
+  } else {
+    const bodyH = 18
+    const bodyY = -bodyH / 2
+    if (halo) {
+      roundBody(ctx, x0 - 2, bodyY - 2, length + 4, bodyH + 4, 3)
+      ctx.strokeStyle = halo
+      ctx.lineWidth = 4
+      ctx.stroke()
+    }
+    roundBody(ctx, x0, bodyY, length, bodyH, 2)
+    const housing = ctx.createLinearGradient(0, bodyY, 0, bodyY + bodyH)
+    housing.addColorStop(0, "#2c3138")
+    housing.addColorStop(0.4, "#16191e")
+    housing.addColorStop(1, "#0a0c10")
+    ctx.fillStyle = housing
+    ctx.fill()
+    ctx.strokeStyle = "#4d5560"
+    ctx.lineWidth = 1
+    ctx.stroke()
+    for (let index = 0; index < count; index++) {
+      const x = -span / 2 + index * PITCH
+      roundBody(ctx, x - 6.4, -7.4, 12.8, 14.8, 1.8)
+      ctx.fillStyle = "#f4f7fb"
+      ctx.fill()
+      ctx.strokeStyle = "#8b97a6"
+      ctx.lineWidth = 1
+      ctx.stroke()
+      roundBody(ctx, x - 3.4, -4.6, 6.8, 9.2, 1.2)
+      ctx.fillStyle = "#12161c"
+      ctx.fill()
+    }
+  }
+  ctx.restore()
+}
+
+function icLocal(rotation: IcRotation, lx: number, ly: number) {
+  const { rail, across } = icDirections(rotation)
+  return { x: lx * rail.dc + ly * across.dc, y: lx * rail.dr + ly * across.dr }
+}
+
+export function icLabelTop(ax: number, ay: number, pinCount: number, railDistance: number, rotation: IcRotation) {
+  const perRail = pinCount / 2
+  const gap = 1 + railDistance
+  const center = icLocal(rotation, ((perRail - 1) * PITCH) / 2, (gap * PITCH) / 2)
+  const cx = ax + center.x
+  const cy = ay + center.y
+  const halfAlong = ((perRail - 1) * PITCH + 16) / 2
+  const halfAcross = Math.max(12, gap * PITCH - 14) / 2
+  let top = Infinity
+  for (const lx of [-halfAlong, halfAlong]) {
+    for (const ly of [-halfAcross, halfAcross]) {
+      top = Math.min(top, cy + icLocal(rotation, lx, ly).y)
+    }
+  }
+  return { x: cx, y: top }
+}
+
+export function drawIc(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  pinCount: number,
+  railDistance: number,
+  rotation: IcRotation,
+  halo: string | null,
+) {
+  const perRail = pinCount / 2
+  const gap = 1 + railDistance
+  const center = icLocal(rotation, ((perRail - 1) * PITCH) / 2, (gap * PITCH) / 2)
+  const { rail, across } = icDirections(rotation)
+  const bodyLength = (perRail - 1) * PITCH + 16
+  const bodyWidth = Math.max(12, gap * PITCH - 14)
+  ctx.save()
+  ctx.translate(ax + center.x, ay + center.y)
+  ctx.transform(rail.dc, rail.dr, across.dc, across.dr, 0, 0)
+  ctx.lineJoin = "round"
+  const x0 = -bodyLength / 2
+  const y0 = -bodyWidth / 2
+  const notch = Math.min(6.5, bodyWidth * 0.34)
+  if (halo) {
+    roundBody(ctx, x0 - 3, y0 - 3, bodyLength + 6, bodyWidth + 6, 3)
+    ctx.strokeStyle = halo
+    ctx.lineWidth = 4
+    ctx.stroke()
+  }
+  roundBody(ctx, x0, y0, bodyLength, bodyWidth, 2)
+  const body = ctx.createLinearGradient(0, y0, 0, y0 + bodyWidth)
+  body.addColorStop(0, "#3c4148")
+  body.addColorStop(0.35, "#1a1d22")
+  body.addColorStop(1, "#0b0d11")
+  ctx.fillStyle = body
+  ctx.fill()
+  ctx.strokeStyle = "#5c656f"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(x0, 0, notch, -Math.PI / 2, Math.PI / 2)
+  ctx.fillStyle = "#14653c"
+  ctx.fill()
+  ctx.strokeStyle = "#d5dbe3"
+  ctx.lineWidth = 1.5
+  ctx.stroke()
+  ctx.strokeStyle = "#c5ccd4"
+  ctx.lineWidth = 1.7
+  const lead = (gap * PITCH) / 2
+  for (let index = 0; index < perRail; index++) {
+    const x = (-(perRail - 1) / 2 + index) * PITCH
+    ctx.beginPath()
+    ctx.moveTo(x, -bodyWidth / 2)
+    ctx.lineTo(x, -lead)
+    ctx.moveTo(x, bodyWidth / 2)
+    ctx.lineTo(x, lead)
+    ctx.stroke()
+  }
   ctx.restore()
 }

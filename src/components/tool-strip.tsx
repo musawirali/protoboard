@@ -61,7 +61,7 @@ function ToolButton({
 
 export function ToolStrip({ tool, onTool }: ToolStripProps) {
   return (
-    <div className="absolute top-3 left-3 z-20 flex flex-col gap-1 rounded-lg border border-white/15 bg-black/75 p-1 shadow-lg">
+    <div className="absolute top-3 left-3 z-20 flex max-h-[calc(100%-1.5rem)] flex-col gap-1 overflow-y-auto rounded-lg border border-white/15 bg-black/75 p-1 shadow-lg">
       <ToolButton label="Select" pressed={tool === "select"} onClick={() => onTool("select")}>
         <svg aria-hidden viewBox="0 0 16 16" className="size-4">
           <path d="M3.2 1.8 13 7.6 7.6 8.8 6.2 14.2Z" fill="currentColor" />
@@ -116,6 +116,40 @@ export function ToolStrip({ tool, onTool }: ToolStripProps) {
             strokeWidth="1.7"
             strokeLinecap="round"
             strokeLinejoin="round"
+          />
+        </svg>
+      </ToolButton>
+      <ToolButton label="Male header" pressed={tool === "male-header"} onClick={() => onTool("male-header")}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <rect x="1.4" y="3.2" width="21.2" height="7.2" rx="1.2" fill="currentColor" />
+          <path
+            d="M5 10.2v8.2M9.7 10.2v8.2M14.3 10.2v8.2M19 10.2v8.2"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+          />
+        </svg>
+      </ToolButton>
+      <ToolButton label="Female header" pressed={tool === "female-header"} onClick={() => onTool("female-header")}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <rect x="2" y="2.4" width="20" height="19.2" rx="2" fill="none" stroke="currentColor" strokeWidth="2.2" />
+          <rect x="4.3" y="5.2" width="3" height="13.6" rx="1.1" fill="currentColor" />
+          <rect x="8.8" y="5.2" width="3" height="13.6" rx="1.1" fill="currentColor" />
+          <rect x="13.2" y="5.2" width="3" height="13.6" rx="1.1" fill="currentColor" />
+          <rect x="17.7" y="5.2" width="3" height="13.6" rx="1.1" fill="currentColor" />
+        </svg>
+      </ToolButton>
+      <ToolButton label="IC" pressed={tool === "ic"} onClick={() => onTool("ic")}>
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <rect x="6.2" y="3.2" width="11.6" height="17.6" rx="1.4" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M9 3.2c0 2.8 6 2.8 6 0" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path
+            d="M6.2 7.2H2.4M6.2 12H2.4M6.2 16.8H2.4M17.8 7.2H21.6M17.8 12H21.6M17.8 16.8H21.6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
           />
         </svg>
       </ToolButton>

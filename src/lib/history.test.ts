@@ -152,4 +152,33 @@ describe("component history", () => {
     components = applyBoardEdit({ traces: [], components }, flag, "undo").components
     expect(components[1].polarized).toBe(true)
   })
+
+  it("undoes an IC pin count, rotation, and pin label together", () => {
+    const chip: PlacedPart = {
+      id: "u",
+      kind: "ic",
+      name: "I1",
+      value: "",
+      a: { c: 2, r: 2 },
+      b: { c: 2, r: 2 },
+      pinCount: 8,
+      railDistance: 0,
+      rotation: 0,
+      pinLabels: ["", "", "", "", "", "", "", ""],
+    }
+    const edit: BoardEdit = {
+      type: "icConfig",
+      id: "u",
+      from: { pinCount: 8, railDistance: 0, rotation: 0, pinLabels: chip.pinLabels ?? [] },
+      to: { pinCount: 8, railDistance: 1, rotation: 90, pinLabels: ["VCC", "", "", "", "", "", "", ""] },
+    }
+    let components = applyBoardEdit({ traces: [], components: [chip] }, edit, "redo").components
+    expect(components[0].railDistance).toBe(1)
+    expect(components[0].rotation).toBe(90)
+    expect(components[0].pinLabels?.[0]).toBe("VCC")
+    components = applyBoardEdit({ traces: [], components }, edit, "undo").components
+    expect(components[0].railDistance).toBe(0)
+    expect(components[0].rotation).toBe(0)
+    expect(components[0].pinLabels?.[0]).toBe("")
+  })
 })
