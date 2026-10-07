@@ -395,7 +395,7 @@ export function headerLabelTop(ax: number, ay: number, bx: number, by: number, m
   if (!frame) return null
   const overhang = 8
   const half = frame.span / 2 + overhang
-  const y0 = male ? -22 : -8
+  const y0 = male ? -18.6 : -8
   const y1 = male ? 8 : 8
   let top = Infinity
   for (const lx of [-half, half]) {
@@ -428,7 +428,7 @@ export function drawHeader(
     // Local -y is up on a horizontal strip and left on a vertical strip.
     const bodyH = 16
     const bodyY = -bodyH / 2
-    const pinLen = 14
+    const pinLen = 10.6
     const pinY = bodyY - pinLen
     if (halo) {
       roundBody(ctx, x0 - 3, pinY - 3, length + 6, pinLen + bodyH + 6, 3)
@@ -440,8 +440,6 @@ export function drawHeader(
       const x = -span / 2 + index * PITCH
       ctx.fillStyle = "#c9862a"
       ctx.fillRect(x - 1.7, pinY, 3.4, pinLen)
-      ctx.fillStyle = "#f3d48a"
-      ctx.fillRect(x - 2.3, pinY, 4.6, 3.4)
     }
     roundBody(ctx, x0, bodyY, length, bodyH, 1.6)
     const plastic = ctx.createLinearGradient(0, bodyY, 0, bodyY + bodyH)
