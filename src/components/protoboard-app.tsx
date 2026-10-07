@@ -9,7 +9,6 @@ import { ProtoboardCanvas } from "@/components/protoboard-canvas"
 import { ToolStrip } from "@/components/tool-strip"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
 import { UndoBar } from "@/components/undo-bar"
-import { Input } from "@/components/ui/input"
 import { canCommit, holeOnSegment, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
 import { assignNets, displayNetName, netColor } from "@/lib/nets"
@@ -59,7 +58,6 @@ export function ProtoboardApp() {
   const [screen, setScreen] = useState<"list" | "create" | "editor">("list")
   const [openId, setOpenId] = useState<string | null>(null)
   const [name, setName] = useState("")
-  const [nameDraft, setNameDraft] = useState("")
   const [board, setBoard] = useState<{ cols: number; rows: number } | null>(null)
   const [traces, setTraces] = useState<Trace[]>([])
   const [parts, setParts] = useState<PlacedPart[]>([])
@@ -185,7 +183,6 @@ export function ProtoboardApp() {
   function openProject(project: SavedProject) {
     setOpenId(project.id)
     setName(project.name)
-    setNameDraft(project.name)
     setBoard({ cols: project.cols, rows: project.rows })
     setTraces(project.traces.map((trace) => ({ ...trace, a: { ...trace.a }, b: { ...trace.b } })))
     setParts(
@@ -219,29 +216,10 @@ export function ProtoboardApp() {
   }
 
   function leaveEditor() {
-    if (openId && board) {
-      const trimmed = nameDraft.trim()
-      storeOpen(trimmed || name, board, traces, parts)
-      if (trimmed) {
-        setName(trimmed)
-        setNameDraft(trimmed)
-      } else {
-        setNameDraft(name)
-      }
-    }
+    if (openId && board) storeOpen(name, board, traces, parts)
     setScreen("list")
     setOpenId(null)
     setBoard(null)
-  }
-
-  function commitProjectName() {
-    const trimmed = nameDraft.trim()
-    if (!trimmed) {
-      setNameDraft(name)
-      return
-    }
-    setName(trimmed)
-    setNameDraft(trimmed)
   }
 
   function deleteProject(id: string) {
@@ -455,28 +433,22 @@ export function ProtoboardApp() {
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
-            className="shrink-0 text-sm text-muted-foreground hover:text-foreground"
-            onMouseDown={(event) => event.preventDefault()}
+            aria-label="Projects"
+            className="flex size-9 shrink-0 items-center justify-center rounded-md text-foreground transition-colors hover:bg-white/10"
             onClick={leaveEditor}
           >
-            Projects
+            <svg aria-hidden="true" viewBox="0 0 16 16" className="size-4">
+              <path
+                d="M2.2 7.1 8 2.3l5.8 4.8V13a.8.8 0 0 1-.8.8H10v-3.4H6V13.8H3a.8.8 0 0 1-.8-.8Z"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.4"
+                strokeLinejoin="round"
+              />
+            </svg>
           </button>
           <div className="min-w-0">
-            <Input
-              aria-label="Project name"
-              value={nameDraft}
-              autoComplete="off"
-              spellCheck={false}
-              className="h-8 max-w-56 font-medium"
-              onChange={(event) => setNameDraft(event.target.value)}
-              onBlur={commitProjectName}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault()
-                  event.currentTarget.blur()
-                }
-              }}
-            />
+            <h1 className="truncate text-sm font-semibold tracking-tight">{name}</h1>
             <p className="text-xs text-muted-foreground">
               {board.cols} × {board.rows} pin holes
             </p>
