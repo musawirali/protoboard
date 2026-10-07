@@ -7,6 +7,8 @@ export type Trace = {
   readonly id?: string
   readonly a: Hole
   readonly b: Hole
+  /** Custom name for this trace's net. Unset traces use the generated "Net N" label. */
+  readonly name?: string
 }
 
 export function sameHole(a: Hole, b: Hole) {

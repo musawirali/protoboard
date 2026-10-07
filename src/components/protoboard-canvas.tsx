@@ -708,7 +708,7 @@ export function ProtoboardCanvas({
         }
       />
       <div className="pointer-events-none absolute inset-0">
-        <p className="absolute bottom-3 left-3 max-w-[calc(100%-9rem)] rounded-md bg-black/60 px-2 py-1 text-xs text-white">
+        <p className="absolute bottom-3 left-3 max-w-[calc(50%-4.5rem)] rounded-md bg-black/60 px-2 py-1 text-xs text-white">
           {status}
         </p>
         <div className="pointer-events-auto absolute right-3 bottom-3 flex gap-2">

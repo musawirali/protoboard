@@ -5,10 +5,12 @@ import { BoardSetup } from "@/components/board-setup"
 import { ChangeSizeDialog } from "@/components/change-size-dialog"
 import { PropertiesPanel } from "@/components/properties-panel"
 import { ProtoboardCanvas } from "@/components/protoboard-canvas"
+import { ToolStrip } from "@/components/tool-strip"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
+import { UndoBar } from "@/components/undo-bar"
 import { canCommit, holesOnSpan, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyEdit, pushEdit, type TraceEdit } from "@/lib/history"
-import { assignNets, netColor } from "@/lib/nets"
+import { assignNets, displayNetName, netColor } from "@/lib/nets"
 import type { Selection, ToolName } from "@/lib/selection"
 
 function selectionStillThere(selection: Selection | null, traces: readonly Trace[]): Selection | null {
@@ -89,16 +91,21 @@ export function ProtoboardApp() {
       if (items.has(colorKey)) return
       items.set(colorKey, {
         colorKey,
-        label: assignment.labels[index],
+        name: displayNetName(traces, assignment.colorKeys, assignment.labels, index),
         color: netColor(colorKey),
       })
     })
     return [...items.values()]
-  }, [assignment])
+  }, [assignment, traces])
 
   function netAt(index: number) {
     if (index < 0 || index >= traces.length) return null
-    return { label: assignment.labels[index], color: netColor(assignment.colorKeys[index]) }
+    return {
+      label: assignment.labels[index],
+      color: netColor(assignment.colorKeys[index]),
+      name: displayNetName(traces, assignment.colorKeys, assignment.labels, index),
+      index,
+    }
   }
 
   function netForHole(hole: Hole) {
@@ -129,6 +136,23 @@ export function ProtoboardApp() {
     setPast(pushEdit(past, edit))
     setFuture([])
     setDraft(null)
+  }
+
+  function renameNet(index: number, name: string) {
+    const trimmed = name.trim()
+    if (!trimmed || index < 0 || index >= traces.length) return
+    const current = displayNetName(traces, assignment.colorKeys, assignment.labels, index)
+    if (current === trimmed) return
+    const colorKey = assignment.colorKeys[index]
+    const changes = traces.flatMap((trace, member) => {
+      if (assignment.colorKeys[member] !== colorKey || !trace.id) return []
+      return [{ id: trace.id, from: trace.name, to: trimmed }]
+    })
+    if (changes.length === 0) return
+    const edit: TraceEdit = { type: "rename", changes }
+    setTraces(applyEdit(traces, edit, "redo"))
+    setPast(pushEdit(past, edit))
+    setFuture([])
   }
 
   function removeTrace(id: string) {
@@ -190,19 +214,15 @@ export function ProtoboardApp() {
             onHoleClick={handleHoleClick}
             onSelect={setSelection}
           />
+          <ToolStrip tool={tool} onTool={chooseTool} />
         </div>
-        <aside className="max-h-[48vh] shrink-0 overflow-auto border-t px-3 py-3 md:max-h-none md:w-80 md:border-t-0 md:border-l">
+        <aside className="max-h-[48vh] shrink-0 overflow-auto border-t px-3 pt-3 pb-16 md:max-h-none md:w-80 md:border-t-0 md:border-l md:pb-3">
           <TraceToolbar
             tool={tool}
             draft={draft}
             netCount={assignment.netCount}
             legend={legend}
-            canUndo={past.length > 0}
-            canRedo={future.length > 0}
-            onTool={chooseTool}
             onCancel={() => setDraft(null)}
-            onUndo={undo}
-            onRedo={redo}
           />
           <div className="mt-4">
             <PropertiesPanel
@@ -211,10 +231,12 @@ export function ProtoboardApp() {
               netForTrace={netAt}
               netForHole={netForHole}
               onRemoveTrace={removeTrace}
+              onRenameNet={renameNet}
             />
           </div>
         </aside>
       </div>
+      <UndoBar canUndo={past.length > 0} canRedo={future.length > 0} onUndo={undo} onRedo={redo} />
     </div>
   )
 }

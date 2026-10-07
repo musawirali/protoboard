@@ -64,6 +64,21 @@ describe("trace history", () => {
     expect(traces).toEqual([first, second])
   })
 
+  it("undoes a net rename and keeps the other trace's name", () => {
+    const first = trace("a", 0, 0, 4, 0)
+    const second = trace("b", 0, 2, 4, 2)
+    let traces = [first, second]
+    const edit: TraceEdit = { type: "rename", changes: [{ id: "a", to: "Power" }] }
+    traces = applyEdit(traces, edit, "redo")
+    expect(traces[0].name).toBe("Power")
+    expect(traces[1].name).toBeUndefined()
+    traces = applyEdit(traces, edit, "undo")
+    expect(traces[0].name).toBeUndefined()
+    expect(traces.map((item) => item.id)).toEqual(["a", "b"])
+    traces = applyEdit(traces, edit, "redo")
+    expect(traces[0].name).toBe("Power")
+  })
+
   it("drops the redo tail after a new edit and keeps about 20 steps", () => {
     let traces: Trace[] = []
     let past: TraceEdit[] = []

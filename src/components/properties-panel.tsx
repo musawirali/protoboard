@@ -1,11 +1,14 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { holesOnSpan, type Hole, type Trace } from "@/lib/board"
 import type { Selection } from "@/lib/selection"
 
 type NetInfo = {
   label: number
   color: string
+  name: string
+  index: number
 }
 
 type PropertiesPanelProps = {
@@ -14,6 +17,42 @@ type PropertiesPanelProps = {
   netForTrace: (index: number) => NetInfo | null
   netForHole: (hole: Hole) => NetInfo | null
   onRemoveTrace: (id: string) => void
+  onRenameNet: (index: number, name: string) => void
+}
+
+function NetNameField({
+  net,
+  onRenameNet,
+}: {
+  net: NetInfo
+  onRenameNet: (index: number, name: string) => void
+}) {
+  const [value, setValue] = useState(net.name)
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span className="size-2.5 shrink-0 rounded-full" style={{ backgroundColor: net.color }} aria-hidden />
+      <Input
+        aria-label="Net name"
+        value={value}
+        className="h-8 w-28 text-right sm:w-36"
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={() => {
+          const next = value.trim()
+          if (!next || next === net.name) {
+            setValue(net.name)
+            return
+          }
+          onRenameNet(net.index, next)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault()
+            event.currentTarget.blur()
+          }
+        }}
+      />
+    </span>
+  )
 }
 
 function holeLabel(hole: Hole) {
@@ -35,6 +74,7 @@ export function PropertiesPanel({
   netForTrace,
   netForHole,
   onRemoveTrace,
+  onRenameNet,
 }: PropertiesPanelProps) {
   const selectedTrace =
     selection?.type === "trace" ? traces.find((trace) => trace.id === selection.id) : undefined
@@ -53,14 +93,7 @@ export function PropertiesPanel({
           <Row label="End">{holeLabel(selectedTrace.b)}</Row>
           <Row label="Holes">{holes.length}</Row>
           <Row label="Net">
-            {net ? (
-              <span className="inline-flex items-center gap-1.5">
-                <span className="size-2.5 rounded-full" style={{ backgroundColor: net.color }} aria-hidden />
-                Net {net.label}
-              </span>
-            ) : (
-              "On no net"
-            )}
+            {net ? <NetNameField key={net.name} net={net} onRenameNet={onRenameNet} /> : "On no net"}
           </Row>
         </dl>
         <Button
@@ -82,14 +115,7 @@ export function PropertiesPanel({
         <Row label="Column">{selection.hole.c + 1}</Row>
         <Row label="Row">{selection.hole.r + 1}</Row>
         <Row label="Net">
-          {net ? (
-            <span className="inline-flex items-center gap-1.5">
-              <span className="size-2.5 rounded-full" style={{ backgroundColor: net.color }} aria-hidden />
-              Net {net.label}
-            </span>
-          ) : (
-            "On no net"
-          )}
+          {net ? <NetNameField key={net.name} net={net} onRenameNet={onRenameNet} /> : "On no net"}
         </Row>
       </dl>
     )

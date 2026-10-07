@@ -80,6 +80,26 @@ const NET_PALETTE = [
   "#63e6be",
 ]
 
+/** Name shown for a trace's net: a custom name on that net, or "Net N". */
+export function displayNetName(
+  traces: readonly Trace[],
+  colorKeys: readonly number[],
+  labels: readonly number[],
+  index: number,
+) {
+  const colorKey = colorKeys[index]
+  const label = labels[index]
+  if (colorKey == null || label == null) return "Net"
+  const rootName = traces[colorKey]?.name?.trim()
+  if (rootName) return rootName
+  for (let member = 0; member < traces.length; member++) {
+    if (colorKeys[member] !== colorKey) continue
+    const named = traces[member]?.name?.trim()
+    if (named) return named
+  }
+  return `Net ${label}`
+}
+
 export function netColor(colorKey: number) {
   if (colorKey >= 0 && colorKey < NET_PALETTE.length) return NET_PALETTE[colorKey]
   const hue = (colorKey * 137.508) % 360

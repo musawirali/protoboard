@@ -3,7 +3,7 @@ import type { Hole } from "@/lib/board"
 import type { ToolName } from "@/lib/selection"
 
 export type NetLegendItem = {
-  label: number
+  name: string
   colorKey: number
   color: string
 }
@@ -13,64 +13,16 @@ type TraceToolbarProps = {
   draft: Hole | null
   netCount: number
   legend: NetLegendItem[]
-  canUndo: boolean
-  canRedo: boolean
-  onTool: (tool: ToolName) => void
   onCancel: () => void
-  onUndo: () => void
-  onRedo: () => void
 }
 
-export function TraceToolbar({
-  tool,
-  draft,
-  netCount,
-  legend,
-  canUndo,
-  canRedo,
-  onTool,
-  onCancel,
-  onUndo,
-  onRedo,
-}: TraceToolbarProps) {
+export function TraceToolbar({ tool, draft, netCount, legend, onCancel }: TraceToolbarProps) {
   const netLabel = netCount === 1 ? "1 net" : `${netCount} nets`
 
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">Tools</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button
-            type="button"
-            variant={tool === "select" ? "default" : "outline"}
-            aria-pressed={tool === "select"}
-            className="h-11"
-            onClick={() => onTool("select")}
-          >
-            <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-              <path d="M3 2.2 12.8 8 7.4 9.1 5.8 14.2Z" fill="currentColor" />
-            </svg>
-            Select
-          </Button>
-          <Button
-            type="button"
-            variant={tool === "trace" ? "default" : "outline"}
-            aria-pressed={tool === "trace"}
-            className="h-11"
-            onClick={() => onTool("trace")}
-          >
-            PCB Trace
-          </Button>
-        </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <Button type="button" variant="outline" className="h-11" disabled={!canUndo} onClick={onUndo}>
-            Undo
-          </Button>
-          <Button type="button" variant="outline" className="h-11" disabled={!canRedo} onClick={onRedo}>
-            Redo
-          </Button>
-        </div>
-        <p className="mt-2 text-sm leading-5 text-muted-foreground">
+        <p className="text-sm leading-5 text-muted-foreground">
           {tool === "select"
             ? "Click a trace or a pin hole. Click empty board to clear the selection."
             : draft
@@ -100,7 +52,7 @@ export function TraceToolbar({
                   style={{ backgroundColor: item.color }}
                   aria-hidden
                 />
-                Net {item.label}
+                {item.name}
               </li>
             ))}
           </ul>
