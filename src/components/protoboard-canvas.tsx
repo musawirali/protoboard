@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Button } from "@/components/ui/button"
 import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
+import { componentHitRadius, drawComponent } from "@/lib/part-art"
 import { canPlacePart, holeOccupied, PART_REACH, type PlacedPart } from "@/lib/parts"
 import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
 
@@ -14,7 +15,6 @@ const HOLE_R = 3.15
 const LANE = 22
 const HOVER_R = 14
 const SELECT_PIN = 11
-const PART_HIT = 8
 
 type View = {
   panX: number
@@ -105,95 +105,10 @@ function strokeLane(
   ctx.stroke()
 }
 
-function drawPlus(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  ctx.beginPath()
-  ctx.moveTo(x - 3.4, y)
-  ctx.lineTo(x + 3.4, y)
-  ctx.moveTo(x, y - 3.4)
-  ctx.lineTo(x, y + 3.4)
-  ctx.stroke()
-}
-
-function drawMinus(ctx: CanvasRenderingContext2D, x: number, y: number) {
-  ctx.beginPath()
-  ctx.moveTo(x - 3.4, y)
-  ctx.lineTo(x + 3.4, y)
-  ctx.stroke()
-}
-
-function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart) {
+function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null) {
   const from = holeXY(part.a.c, part.a.r)
   const to = holeXY(part.b.c, part.b.r)
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const len = Math.hypot(dx, dy)
-  if (len < 1) return
-  ctx.save()
-  ctx.translate((from.x + to.x) / 2, (from.y + to.y) / 2)
-  ctx.rotate(Math.atan2(dy, dx))
-  ctx.strokeStyle = "#f7f4ee"
-  ctx.fillStyle = "#f7f4ee"
-  ctx.lineWidth = 1.7
-  ctx.lineCap = "round"
-  ctx.lineJoin = "round"
-  const body = Math.min(16, Math.max(12, len * 0.46))
-  ctx.beginPath()
-  ctx.moveTo(-len / 2, 0)
-  ctx.lineTo(-body / 2, 0)
-  ctx.moveTo(body / 2, 0)
-  ctx.lineTo(len / 2, 0)
-  ctx.stroke()
-  if (part.kind === "resistor") {
-    const half = body / 2
-    const amp = 3.3
-    ctx.beginPath()
-    ctx.moveTo(-half, 0)
-    const steps = 6
-    for (let step = 1; step <= steps; step++) {
-      const x = -half + (body * step) / steps
-      const y = step === steps ? 0 : step % 2 === 0 ? -amp : amp
-      ctx.lineTo(x, y)
-    }
-    ctx.stroke()
-  } else if (part.kind === "capacitor") {
-    const gap = 2.2
-    const plate = 7
-    ctx.beginPath()
-    ctx.moveTo(-gap, -plate)
-    ctx.lineTo(-gap, plate)
-    ctx.moveTo(gap, -plate)
-    ctx.lineTo(gap, plate)
-    ctx.stroke()
-    if (part.polarized) {
-      drawPlus(ctx, -gap - 8, -7)
-      drawMinus(ctx, gap + 8, -7)
-    }
-  } else {
-    const half = 6
-    const height = 5.2
-    ctx.beginPath()
-    ctx.moveTo(-half, -height)
-    ctx.lineTo(-half, height)
-    ctx.lineTo(half - 1.4, 0)
-    ctx.closePath()
-    ctx.fill()
-    ctx.beginPath()
-    ctx.moveTo(half, -height)
-    ctx.lineTo(half, height)
-    ctx.stroke()
-  }
-  ctx.restore()
-}
-
-function partHalo(ctx: CanvasRenderingContext2D, part: PlacedPart, width: number, color: string) {
-  const from = holeXY(part.a.c, part.a.r)
-  const to = holeXY(part.b.c, part.b.r)
-  ctx.beginPath()
-  ctx.moveTo(from.x, from.y)
-  ctx.lineTo(to.x, to.y)
-  ctx.strokeStyle = color
-  ctx.lineWidth = width
-  ctx.stroke()
+  drawComponent(ctx, part.kind, part.polarized, from.x, from.y, to.x, to.y, halo)
 }
 
 function distanceToSegment(
@@ -232,8 +147,10 @@ function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
   for (const part of parts) {
     const from = holeXY(part.a.c, part.a.r)
     const to = holeXY(part.b.c, part.b.r)
+    const span = Math.hypot(to.x - from.x, to.y - from.y)
     const distance = distanceToSegment(worldX, worldY, from.x, from.y, to.x, to.y)
-    if (distance <= PART_HIT && (best == null || distance < best.distance)) best = { part, distance }
+    const limit = componentHitRadius(part.kind, part.polarized, span)
+    if (distance <= limit && (best == null || distance < best.distance)) best = { part, distance }
   }
   return best?.part
 }
@@ -442,13 +359,12 @@ export function ProtoboardCanvas({
       strokeLane(ctx, model.draftStart, hover, netColor(previewKey))
     }
 
-    if (model.tool === "select" && hoverPartRef.current && hoverPartRef.current !== model.selectedPartId) {
-      const hovered = model.parts.find((part) => part.id === hoverPartRef.current)
-      if (hovered) partHalo(ctx, hovered, 5, "rgba(255,255,255,0.45)")
-    }
     for (const part of model.parts) {
-      if (part.id === model.selectedPartId) partHalo(ctx, part, 6, "#fffef6")
-      drawPartSymbol(ctx, part)
+      const selected = part.id === model.selectedPartId
+      const hovered =
+        model.tool === "select" && hoverPartRef.current === part.id && !selected
+      const halo = selected ? "#fffef6" : hovered ? "rgba(255,255,255,0.72)" : null
+      drawPartSymbol(ctx, part, halo)
     }
     const previewLegal =
       isPartTool(model.tool) &&
@@ -457,7 +373,7 @@ export function ProtoboardCanvas({
       canPlacePart(model.draftStart, hover) &&
       !holeOccupied(model.parts, hover)
     if (previewLegal && model.draftStart && hover && isPartTool(model.tool)) {
-      drawPartSymbol(ctx, { id: "preview", kind: model.tool, a: model.draftStart, b: hover })
+      drawPartSymbol(ctx, { id: "preview", kind: model.tool, a: model.draftStart, b: hover }, null)
     }
 
     const punchHoles = () => {

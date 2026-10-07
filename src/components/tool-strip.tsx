@@ -76,32 +76,22 @@ export function ToolStrip({ tool, onTool }: ToolStripProps) {
       </ToolButton>
       <ToolButton label="Resistor" pressed={tool === "resistor"} onClick={() => onTool("resistor")}>
         <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path
-            d="M1 8h2.2l1.1-3.1 1.7 6.2 1.7-6.2 1.7 6.2 1.1-3.1H15"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          <path d="M1 8h2.2M12.8 8H15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <rect x="3.1" y="5.1" width="9.8" height="5.8" rx="2.9" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <path d="M5.1 5.2v5.6M6.9 5.2v5.6M8.7 5.2v5.6M10.7 5.2v5.6" stroke="currentColor" strokeWidth="1.15" />
         </svg>
       </ToolButton>
       <ToolButton label="Capacitor" pressed={tool === "capacitor"} onClick={() => onTool("capacitor")}>
         <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path
-            d="M1.5 8h4.2M10.3 8H14.5M7.2 3.5v9M8.8 3.5v9"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.4"
-            strokeLinecap="round"
-          />
+          <path d="M1.2 8h3.1M11.7 8H14.8" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <circle cx="8" cy="8" r="3.35" fill="none" stroke="currentColor" strokeWidth="1.3" />
         </svg>
       </ToolButton>
       <ToolButton label="Diode" pressed={tool === "diode"} onClick={() => onTool("diode")}>
         <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path d="M1.5 8h2.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-          <path d="M4.2 4.2 11 8 4.2 11.8Z" fill="currentColor" />
-          <path d="M11.8 4.2v7.6M12.4 8H14.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M1 8h2.2M12.6 8H15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          <rect x="3.1" y="5.2" width="9.4" height="5.6" rx="2.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <rect x="8.7" y="5.35" width="2.35" height="5.3" fill="currentColor" />
         </svg>
       </ToolButton>
     </div>
