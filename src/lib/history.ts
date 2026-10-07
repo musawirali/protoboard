@@ -19,6 +19,8 @@ export type BoardEdit =
   | { type: "place"; index: number; component: PlacedPart }
   | { type: "unplace"; index: number; component: PlacedPart }
   | { type: "polarize"; id: string; from: boolean; to: boolean }
+  | { type: "partName"; id: string; from: string; to: string }
+  | { type: "partValue"; id: string; from: string; to: string }
 
 export type BoardSnapshot = {
   traces: Trace[]
@@ -82,6 +84,16 @@ export function applyBoardEdit(
     return {
       traces: state.traces.slice(),
       components: state.components.map((part) => (part.id === edit.id ? { ...part, polarized } : part)),
+    }
+  }
+  if (edit.type === "partName" || edit.type === "partValue") {
+    const next = direction === "undo" ? edit.from : edit.to
+    return {
+      traces: state.traces.slice(),
+      components: state.components.map((part) => {
+        if (part.id !== edit.id) return part
+        return edit.type === "partName" ? { ...part, name: next } : { ...part, value: next }
+      }),
     }
   }
   return { traces: applyEdit(state.traces, edit, direction), components: state.components.slice() }

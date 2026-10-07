@@ -85,6 +85,28 @@ export function ledMetrics(span: number): LedMetrics {
   return { radius, flatX: radius * 0.55 }
 }
 
+/** Half-size of the body along the leads and across them, in board pixels. */
+export function componentSilhouette(kind: ComponentKind, polarized: boolean | undefined, span: number) {
+  if (kind === "resistor") {
+    const body = resistorMetrics(span)
+    return { along: body.length / 2, across: body.radius }
+  }
+  if (kind === "diode") {
+    const body = diodeMetrics(span)
+    return { along: body.length / 2, across: body.radius }
+  }
+  if (kind === "led") {
+    const body = ledMetrics(span)
+    return { along: body.radius, across: body.radius }
+  }
+  if (kind === "capacitor" && polarized) {
+    const body = electrolyticMetrics(span)
+    return { along: body.radius, across: body.radius }
+  }
+  const disc = ceramicMetrics(span)
+  return { along: disc.rx, across: disc.ry }
+}
+
 export function componentHitRadius(kind: ComponentKind, polarized: boolean | undefined, span: number) {
   if (kind === "resistor") return resistorMetrics(span).radius + 2
   if (kind === "diode") return diodeMetrics(span).radius + 2

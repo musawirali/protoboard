@@ -105,7 +105,7 @@ describe("trace history", () => {
 })
 
 function placed(id: string, c1: number, r1: number, c2: number, r2: number): PlacedPart {
-  return { id, kind: "capacitor", a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
+  return { id, kind: "capacitor", name: "C1", value: "", a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
 }
 
 describe("component history", () => {
@@ -133,6 +133,18 @@ describe("component history", () => {
     expect(components).toEqual([second])
     components = applyBoardEdit({ traces: [], components }, removal, "undo").components
     expect(components).toEqual([first, second])
+
+    const renamed: BoardEdit = { type: "partName", id: "b", from: "C1", to: "C4" }
+    components = applyBoardEdit({ traces: [], components }, renamed, "redo").components
+    expect(components[1].name).toBe("C4")
+    components = applyBoardEdit({ traces: [], components }, renamed, "undo").components
+    expect(components[1].name).toBe("C1")
+
+    const valued: BoardEdit = { type: "partValue", id: "b", from: "", to: "1k Ohms" }
+    components = applyBoardEdit({ traces: [], components }, valued, "redo").components
+    expect(components[1].value).toBe("1k Ohms")
+    components = applyBoardEdit({ traces: [], components }, valued, "undo").components
+    expect(components[1].value).toBe("")
 
     const flag: BoardEdit = { type: "polarize", id: "b", from: true, to: false }
     components = applyBoardEdit({ traces: [], components }, flag, "redo").components

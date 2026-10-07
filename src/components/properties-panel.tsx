@@ -1,5 +1,6 @@
-import type { ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { holesOnSpan, type Hole, type Trace } from "@/lib/board"
 import type { PlacedPart } from "@/lib/parts"
 import type { Selection } from "@/lib/selection"
@@ -20,6 +21,8 @@ type PropertiesPanelProps = {
   onRemoveTrace: (id: string) => void
   onRemovePart: (id: string) => void
   onPolarize: (id: string, polarized: boolean) => void
+  onRenamePart: (id: string, name: string) => boolean
+  onValuePart: (id: string, value: string) => void
 }
 
 function holeLabel(hole: Hole) {
@@ -45,6 +48,42 @@ function NetName({ net }: { net: NetInfo | null }) {
   )
 }
 
+function PartTextField({
+  label,
+  committed,
+  rejectEmpty,
+  onCommit,
+}: {
+  label: string
+  committed: string
+  rejectEmpty: boolean
+  onCommit: (next: string) => boolean
+}) {
+  const [text, setText] = useState(committed)
+  function commit() {
+    const next = text.trim()
+    if ((rejectEmpty && !next) || next === committed) {
+      setText(committed)
+      return
+    }
+    if (!onCommit(next)) setText(committed)
+  }
+  return (
+    <Input
+      aria-label={label}
+      value={text}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    />
+  )
+}
+
 function partHeading(kind: PlacedPart["kind"]) {
   if (kind === "resistor") return "Selected resistor"
   if (kind === "capacitor") return "Selected capacitor"
@@ -61,6 +100,8 @@ export function PropertiesPanel({
   onRemoveTrace,
   onRemovePart,
   onPolarize,
+  onRenamePart,
+  onValuePart,
 }: PropertiesPanelProps) {
   const selectedTrace =
     selection?.type === "trace" ? traces.find((trace) => trace.id === selection.id) : undefined
@@ -91,6 +132,31 @@ export function PropertiesPanel({
             </>
           )}
         </dl>
+        <div className="mt-3 flex flex-col gap-2">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Name</span>
+            <PartTextField
+              key={`${part.id}:name:${part.name}`}
+              label="Name"
+              committed={part.name}
+              rejectEmpty
+              onCommit={(next) => onRenamePart(part.id, next)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Value</span>
+            <PartTextField
+              key={`${part.id}:value:${part.value}`}
+              label="Value"
+              committed={part.value}
+              rejectEmpty={false}
+              onCommit={(next) => {
+                onValuePart(part.id, next)
+                return true
+              }}
+            />
+          </label>
+        </div>
         {part.kind === "capacitor" ? (
           <label className="mt-3 flex items-center justify-between gap-3 text-sm">
             Polarized

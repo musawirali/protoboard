@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Button } from "@/components/ui/button"
 import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
-import { componentHitRadius, drawComponent } from "@/lib/part-art"
+import { componentHitRadius, componentSilhouette, drawComponent } from "@/lib/part-art"
 import { canPlacePart, holeOccupied, PART_REACH, type PlacedPart } from "@/lib/parts"
 import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
 
@@ -373,7 +373,11 @@ export function ProtoboardCanvas({
       canPlacePart(model.draftStart, hover) &&
       !holeOccupied(model.parts, hover)
     if (previewLegal && model.draftStart && hover && isPartTool(model.tool)) {
-      drawPartSymbol(ctx, { id: "preview", kind: model.tool, a: model.draftStart, b: hover }, null)
+      drawPartSymbol(
+        ctx,
+        { id: "preview", kind: model.tool, name: "", value: "", a: model.draftStart, b: hover },
+        null,
+      )
     }
 
     const punchHoles = () => {
@@ -453,6 +457,37 @@ export function ProtoboardCanvas({
       }
       if (hover) markHole(hover, "rgba(255,255,255,0.38)", "#fffef8", 11, 2.5)
     }
+
+    ctx.save()
+    ctx.font = "600 12px var(--font-geist-sans), sans-serif"
+    ctx.textAlign = "center"
+    ctx.textBaseline = "bottom"
+    ctx.lineJoin = "round"
+    for (const part of model.parts) {
+      if (!part.name) continue
+      const from = holeXY(part.a.c, part.a.r)
+      const to = holeXY(part.b.c, part.b.r)
+      const span = Math.hypot(to.x - from.x, to.y - from.y)
+      const midX = (from.x + to.x) / 2
+      const midY = (from.y + to.y) / 2
+      const { along, across } = componentSilhouette(part.kind, part.polarized, span)
+      const angle = Math.atan2(to.y - from.y, to.x - from.x)
+      const bodyTop = midY - Math.hypot(along * Math.sin(angle), across * Math.cos(angle))
+      const lines = part.value ? [part.name, part.value] : [part.name]
+      const lineHeight = 13
+      // Stroke extends below the baseline; keep that ink off the body and leads.
+      let baseline = Math.min(bodyTop, from.y, to.y) - 8
+      for (let index = lines.length - 1; index >= 0; index -= 1) {
+        const line = lines[index]
+        ctx.lineWidth = 3
+        ctx.strokeStyle = "rgba(7, 32, 18, 0.92)"
+        ctx.strokeText(line, midX, baseline)
+        ctx.fillStyle = "#f6f1e2"
+        ctx.fillText(line, midX, baseline)
+        baseline -= lineHeight
+      }
+    }
+    ctx.restore()
 
     if (PITCH * view.zoom >= 16) {
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0)

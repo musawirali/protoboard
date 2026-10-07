@@ -11,7 +11,7 @@ import { UndoBar } from "@/components/undo-bar"
 import { canCommit, holesOnSpan, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
 import { assignNets, displayNetName, netColor } from "@/lib/nets"
-import { canPlacePart, holeOccupied, type PlacedPart } from "@/lib/parts"
+import { canPlacePart, componentNameTaken, holeOccupied, nextComponentName, type PlacedPart } from "@/lib/parts"
 import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
 
 function selectionStillThere(
@@ -182,6 +182,21 @@ export function ProtoboardApp() {
     commit({ type: "unplace", index, component: parts[index] })
   }
 
+  function renamePart(id: string, name: string) {
+    const trimmed = name.trim()
+    const part = parts.find((item) => item.id === id)
+    if (!trimmed || !part || part.name === trimmed || componentNameTaken(parts, trimmed, id)) return false
+    commit({ type: "partName", id, from: part.name, to: trimmed })
+    return true
+  }
+
+  function setPartValue(id: string, value: string) {
+    const trimmed = value.trim()
+    const part = parts.find((item) => item.id === id)
+    if (!part || part.value === trimmed) return
+    commit({ type: "partValue", id, from: part.value, to: trimmed })
+  }
+
   function setPolarized(id: string, polarized: boolean) {
     const part = parts.find((item) => item.id === id)
     if (!part || part.kind !== "capacitor") return
@@ -217,6 +232,8 @@ export function ProtoboardApp() {
       component: {
         id: crypto.randomUUID(),
         kind: tool,
+        name: nextComponentName(parts, tool),
+        value: "",
         a: draft,
         b: hole,
       },
@@ -280,6 +297,8 @@ export function ProtoboardApp() {
               onRemoveTrace={removeTrace}
               onRemovePart={removePart}
               onPolarize={setPolarized}
+              onRenamePart={renamePart}
+              onValuePart={setPartValue}
             />
           </div>
         </aside>

@@ -7,8 +7,31 @@ export type PlacedPart = {
   readonly kind: ComponentKind
   readonly a: Hole
   readonly b: Hole
+  readonly name: string
+  /** Empty when the part has no value text. */
+  readonly value: string
   /** Capacitors only. Off unless the user turns it on. */
   readonly polarized?: boolean
+}
+
+const NAME_PREFIX: Record<ComponentKind, string> = {
+  resistor: "R",
+  capacitor: "C",
+  diode: "D",
+  led: "L",
+}
+
+/** Lowest unused designator for this kind, unique across every component name. */
+export function nextComponentName(parts: readonly PlacedPart[], kind: ComponentKind) {
+  const prefix = NAME_PREFIX[kind]
+  const used = new Set(parts.map((part) => part.name))
+  let index = 1
+  while (used.has(`${prefix}${index}`)) index += 1
+  return `${prefix}${index}`
+}
+
+export function componentNameTaken(parts: readonly PlacedPart[], name: string, exceptId?: string) {
+  return parts.some((part) => part.id !== exceptId && part.name === name)
 }
 
 /** Farthest Chebyshev steps between the two pins of a component. */
