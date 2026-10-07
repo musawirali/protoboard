@@ -30,7 +30,8 @@ export type DiodeMetrics = {
 }
 
 export type CeramicMetrics = {
-  radius: number
+  rx: number
+  ry: number
 }
 
 export type ElectrolyticMetrics = {
@@ -70,8 +71,8 @@ export function diodeMetrics(span: number): DiodeMetrics {
 }
 
 export function ceramicMetrics(span: number): CeramicMetrics {
-  const radius = Math.min(clamp(span * 0.34, 9.2, 13.5), Math.max(6, (span - 8) / 2))
-  return { radius }
+  const rx = Math.min(clamp(span * 0.46, 12, 20), Math.max(9, (span - 6) / 2))
+  return { rx, ry: rx * 0.48 }
 }
 
 export function electrolyticMetrics(span: number): ElectrolyticMetrics {
@@ -89,7 +90,7 @@ export function componentHitRadius(kind: ComponentKind, polarized: boolean | und
   if (kind === "diode") return diodeMetrics(span).radius + 2
   if (kind === "led") return ledMetrics(span).radius + 1.5
   if (kind === "capacitor" && polarized) return electrolyticMetrics(span).radius + 1.5
-  return ceramicMetrics(span).radius + 1.5
+  return ceramicMetrics(span).ry + 2
 }
 
 function roundBody(
@@ -189,28 +190,28 @@ function drawDiode(ctx: CanvasRenderingContext2D, span: number, halo: string | n
 }
 
 function drawCeramic(ctx: CanvasRenderingContext2D, span: number, halo: string | null) {
-  const { radius } = ceramicMetrics(span)
+  const { rx, ry } = ceramicMetrics(span)
   if (halo) {
     ctx.beginPath()
-    ctx.arc(0, 0, radius, 0, Math.PI * 2)
+    ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2)
     ctx.strokeStyle = halo
     ctx.lineWidth = 5
     ctx.stroke()
   }
-  drawLeads(ctx, span, radius)
-  const disc = ctx.createRadialGradient(-radius * 0.25, -radius * 0.3, radius * 0.15, 0, 0, radius)
+  drawLeads(ctx, span, rx)
+  const disc = ctx.createRadialGradient(-rx * 0.22, -ry * 0.35, Math.min(rx, ry) * 0.2, 0, 0, rx)
   disc.addColorStop(0, "#f8e7c4")
   disc.addColorStop(0.72, "#e4c48a")
   disc.addColorStop(1, "#b8884c")
   ctx.beginPath()
-  ctx.arc(0, 0, radius, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, rx, ry, 0, 0, Math.PI * 2)
   ctx.fillStyle = disc
   ctx.fill()
   ctx.lineWidth = 1.5
   ctx.strokeStyle = "#7a5a32"
   ctx.stroke()
   ctx.beginPath()
-  ctx.arc(0, 0, radius * 0.78, 0, Math.PI * 2)
+  ctx.ellipse(0, 0, rx * 0.78, ry * 0.7, 0, 0, Math.PI * 2)
   ctx.strokeStyle = "rgba(92, 64, 32, 0.45)"
   ctx.lineWidth = 0.8
   ctx.stroke()

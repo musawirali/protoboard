@@ -75,30 +75,48 @@ export function ToolStrip({ tool, onTool }: ToolStripProps) {
         </svg>
       </ToolButton>
       <ToolButton label="Resistor" pressed={tool === "resistor"} onClick={() => onTool("resistor")}>
-        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path d="M1 8h2.2M12.8 8H15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          <rect x="3.1" y="5.1" width="9.8" height="5.8" rx="2.9" fill="none" stroke="currentColor" strokeWidth="1.2" />
-          <path d="M5.1 5.2v5.6M6.9 5.2v5.6M8.7 5.2v5.6M10.7 5.2v5.6" stroke="currentColor" strokeWidth="1.15" />
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <path
+            d="M1.5 12h2.4l2.1-6.4 3.1 12.8 3.1-12.8 3.1 12.8 2.1-6.4H22.5"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       </ToolButton>
       <ToolButton label="Capacitor" pressed={tool === "capacitor"} onClick={() => onTool("capacitor")}>
-        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path d="M1.2 8h3.1M11.7 8H14.8" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          <circle cx="8" cy="8" r="3.35" fill="none" stroke="currentColor" strokeWidth="1.3" />
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <path
+            d="M1.5 12h6.4M16.1 12H22.5M9.2 5.2v13.6M14.6 5.2v13.6"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.4"
+            strokeLinecap="round"
+          />
         </svg>
       </ToolButton>
       <ToolButton label="Diode" pressed={tool === "diode"} onClick={() => onTool("diode")}>
-        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path d="M1 8h2.2M12.6 8H15" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          <rect x="3.1" y="5.2" width="9.4" height="5.6" rx="2.6" fill="none" stroke="currentColor" strokeWidth="1.2" />
-          <rect x="8.7" y="5.35" width="2.35" height="5.3" fill="currentColor" />
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <path d="M1.5 12h3.2M17.4 12H22.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M5.2 6.4 16.2 12 5.2 17.6Z" fill="currentColor" />
+          <path d="M16.8 6.4v11.2" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
       </ToolButton>
       <ToolButton label="LED" pressed={tool === "led"} onClick={() => onTool("led")}>
-        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
-          <path d="M1.2 8h2.6M11.1 8H14.7" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-          <circle cx="7.2" cy="8" r="3.35" fill="none" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M10.15 5.15v5.7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <svg aria-hidden viewBox="0 0 24 24" className="size-8">
+          <path d="M1.2 15h2.6M14.6 15H18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+          <path d="M4 10.2 13.4 15 4 19.8Z" fill="currentColor" />
+          <path d="M14 10.4v9.2" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+          <path
+            d="M13.2 8.2 16.6 4.8M16.6 4.8h-2.8M16.6 4.8v2.8M16.4 9.6l3.4-3.4M19.8 6.2h-2.8M19.8 6.2v2.8"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </svg>
       </ToolButton>
     </div>

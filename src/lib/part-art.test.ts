@@ -24,8 +24,10 @@ describe("physical part metrics", () => {
       }
       expect(diode.length).toBeGreaterThanOrEqual(14)
       expect(diode.length).toBeLessThan(span - 4)
-      expect(ceramic.radius).toBeGreaterThanOrEqual(8)
-      expect(ceramic.radius * 2).toBeLessThan(span - 4)
+      expect(ceramic.rx).toBeGreaterThanOrEqual(10)
+      expect(ceramic.rx * 2).toBeLessThan(span - 4)
+      expect(ceramic.ry).toBeLessThan(ceramic.rx * 0.6)
+      expect(ceramic.ry).toBeGreaterThan(ceramic.rx * 0.4)
       expect(can.radius).toBeGreaterThanOrEqual(9)
       expect(can.radius * 2).toBeLessThan(span - 4)
       expect(can.metalRadius).toBeLessThan(can.radius * 0.7)
