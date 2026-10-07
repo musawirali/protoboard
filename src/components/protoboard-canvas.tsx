@@ -4,7 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { Button } from "@/components/ui/button"
 import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
-import type { Selection, ToolName } from "@/lib/selection"
+import { canPlacePart, holeOccupied, PART_REACH, type PlacedPart } from "@/lib/parts"
+import { isPartTool, type Selection, type ToolName } from "@/lib/selection"
 
 const PITCH = 28
 const MARGIN = 36
@@ -13,6 +14,7 @@ const HOLE_R = 3.15
 const LANE = 22
 const HOVER_R = 14
 const SELECT_PIN = 11
+const PART_HIT = 8
 
 type View = {
   panX: number
@@ -25,9 +27,11 @@ type ProtoboardCanvasProps = {
   rows: number
   traces: Trace[]
   colorKeys: number[]
+  parts: PlacedPart[]
   tool: ToolName
   draftStart: Hole | null
   selectedTraceId: string | null
+  selectedPartId: string | null
   selectedHole: Hole | null
   onHoleClick: (hole: Hole) => void
   onSelect: (selection: Selection | null) => void
@@ -101,6 +105,97 @@ function strokeLane(
   ctx.stroke()
 }
 
+function drawPlus(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.beginPath()
+  ctx.moveTo(x - 3.4, y)
+  ctx.lineTo(x + 3.4, y)
+  ctx.moveTo(x, y - 3.4)
+  ctx.lineTo(x, y + 3.4)
+  ctx.stroke()
+}
+
+function drawMinus(ctx: CanvasRenderingContext2D, x: number, y: number) {
+  ctx.beginPath()
+  ctx.moveTo(x - 3.4, y)
+  ctx.lineTo(x + 3.4, y)
+  ctx.stroke()
+}
+
+function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart) {
+  const from = holeXY(part.a.c, part.a.r)
+  const to = holeXY(part.b.c, part.b.r)
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy)
+  if (len < 1) return
+  ctx.save()
+  ctx.translate((from.x + to.x) / 2, (from.y + to.y) / 2)
+  ctx.rotate(Math.atan2(dy, dx))
+  ctx.strokeStyle = "#f7f4ee"
+  ctx.fillStyle = "#f7f4ee"
+  ctx.lineWidth = 1.7
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  const body = Math.min(16, Math.max(12, len * 0.46))
+  ctx.beginPath()
+  ctx.moveTo(-len / 2, 0)
+  ctx.lineTo(-body / 2, 0)
+  ctx.moveTo(body / 2, 0)
+  ctx.lineTo(len / 2, 0)
+  ctx.stroke()
+  if (part.kind === "resistor") {
+    const half = body / 2
+    const amp = 3.3
+    ctx.beginPath()
+    ctx.moveTo(-half, 0)
+    const steps = 6
+    for (let step = 1; step <= steps; step++) {
+      const x = -half + (body * step) / steps
+      const y = step === steps ? 0 : step % 2 === 0 ? -amp : amp
+      ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  } else if (part.kind === "capacitor") {
+    const gap = 2.2
+    const plate = 7
+    ctx.beginPath()
+    ctx.moveTo(-gap, -plate)
+    ctx.lineTo(-gap, plate)
+    ctx.moveTo(gap, -plate)
+    ctx.lineTo(gap, plate)
+    ctx.stroke()
+    if (part.polarized) {
+      drawPlus(ctx, -gap - 8, -7)
+      drawMinus(ctx, gap + 8, -7)
+    }
+  } else {
+    const half = 6
+    const height = 5.2
+    ctx.beginPath()
+    ctx.moveTo(-half, -height)
+    ctx.lineTo(-half, height)
+    ctx.lineTo(half - 1.4, 0)
+    ctx.closePath()
+    ctx.fill()
+    ctx.beginPath()
+    ctx.moveTo(half, -height)
+    ctx.lineTo(half, height)
+    ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function partHalo(ctx: CanvasRenderingContext2D, part: PlacedPart, width: number, color: string) {
+  const from = holeXY(part.a.c, part.a.r)
+  const to = holeXY(part.b.c, part.b.r)
+  ctx.beginPath()
+  ctx.moveTo(from.x, from.y)
+  ctx.lineTo(to.x, to.y)
+  ctx.strokeStyle = color
+  ctx.lineWidth = width
+  ctx.stroke()
+}
+
 function distanceToSegment(
   px: number,
   py: number,
@@ -132,6 +227,17 @@ function hitTraceIndex(worldX: number, worldY: number, traces: readonly Trace[])
   return best?.index ?? null
 }
 
+function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
+  let best: { part: PlacedPart; distance: number } | null = null
+  for (const part of parts) {
+    const from = holeXY(part.a.c, part.a.r)
+    const to = holeXY(part.b.c, part.b.r)
+    const distance = distanceToSegment(worldX, worldY, from.x, from.y, to.x, to.y)
+    if (distance <= PART_HIT && (best == null || distance < best.distance)) best = { part, distance }
+  }
+  return best?.part
+}
+
 function resolveSelect(
   localX: number,
   localY: number,
@@ -139,11 +245,14 @@ function resolveSelect(
   cols: number,
   rows: number,
   traces: readonly Trace[],
+  parts: readonly PlacedPart[],
 ): Selection | null {
   const worldX = (localX - view.panX) / view.zoom
   const worldY = (localY - view.panY) / view.zoom
   const pin = hitHole(localX, localY, view, cols, rows, SELECT_PIN)
   if (pin) return { type: "hole", hole: pin }
+  const part = hitPart(worldX, worldY, parts)
+  if (part) return { type: "component", id: part.id }
   const traceIndex = hitTraceIndex(worldX, worldY, traces)
   const trace = traceIndex == null ? undefined : traces[traceIndex]
   if (trace?.id) return { type: "trace", id: trace.id }
@@ -177,9 +286,11 @@ export function ProtoboardCanvas({
   rows,
   traces,
   colorKeys,
+  parts,
   tool,
   draftStart,
   selectedTraceId,
+  selectedPartId,
   selectedHole,
   onHoleClick,
   onSelect,
@@ -193,14 +304,17 @@ export function ProtoboardCanvas({
   const sizeRef = useRef({ w: 0, h: 0, dpr: 1 })
   const hoverRef = useRef<Hole | null>(null)
   const hoverTraceRef = useRef<string | null>(null)
+  const hoverPartRef = useRef<string | null>(null)
   const modelRef = useRef({
     cols,
     rows,
     traces,
     colorKeys,
+    parts,
     tool,
     draftStart,
     selectedTraceId,
+    selectedPartId,
     selectedHole,
     onHoleClick,
     onSelect,
@@ -328,6 +442,24 @@ export function ProtoboardCanvas({
       strokeLane(ctx, model.draftStart, hover, netColor(previewKey))
     }
 
+    if (model.tool === "select" && hoverPartRef.current && hoverPartRef.current !== model.selectedPartId) {
+      const hovered = model.parts.find((part) => part.id === hoverPartRef.current)
+      if (hovered) partHalo(ctx, hovered, 5, "rgba(255,255,255,0.45)")
+    }
+    for (const part of model.parts) {
+      if (part.id === model.selectedPartId) partHalo(ctx, part, 6, "#fffef6")
+      drawPartSymbol(ctx, part)
+    }
+    const previewLegal =
+      isPartTool(model.tool) &&
+      model.draftStart != null &&
+      hover != null &&
+      canPlacePart(model.draftStart, hover) &&
+      !holeOccupied(model.parts, hover)
+    if (previewLegal && model.draftStart && hover && isPartTool(model.tool)) {
+      drawPartSymbol(ctx, { id: "preview", kind: model.tool, a: model.draftStart, b: hover })
+    }
+
     const punchHoles = () => {
       ctx.beginPath()
       visitHoles((x, y) => {
@@ -371,6 +503,34 @@ export function ProtoboardCanvas({
           4,
         )
       }
+    } else if (isPartTool(model.tool)) {
+      if (model.draftStart) {
+        const start = model.draftStart
+        for (let row = Math.max(0, start.r - PART_REACH); row <= Math.min(model.rows - 1, start.r + PART_REACH); row++) {
+          for (let col = Math.max(0, start.c - PART_REACH); col <= Math.min(model.cols - 1, start.c + PART_REACH); col++) {
+            const hole = { c: col, r: row }
+            if (!canPlacePart(start, hole) || holeOccupied(model.parts, hole)) continue
+            if (hover && sameHole(hover, hole)) continue
+            markHole(hole, "rgba(186, 230, 253, 0.28)", "rgba(224, 242, 254, 0.8)", 8, 1.5)
+          }
+        }
+        if (!hover || !sameHole(hover, start)) {
+          markHole(start, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
+        }
+      }
+      if (hover) {
+        const legal =
+          model.draftStart != null &&
+          canPlacePart(model.draftStart, hover) &&
+          !holeOccupied(model.parts, hover)
+        markHole(
+          hover,
+          legal ? "rgba(255, 228, 64, 0.96)" : "rgba(255,255,255,0.45)",
+          "#fffef8",
+          legal ? HOVER_R : 11,
+          legal ? 4 : 2.5,
+        )
+      }
     } else {
       if (model.selectedHole && (!hover || !sameHole(hover, model.selectedHole))) {
         markHole(model.selectedHole, "rgba(255, 236, 170, 0.72)", "#fff4cc", 12, 3)
@@ -410,16 +570,18 @@ export function ProtoboardCanvas({
       rows,
       traces,
       colorKeys,
+      parts,
       tool,
       draftStart,
       selectedTraceId,
+      selectedPartId,
       selectedHole,
       onHoleClick,
       onSelect,
     }
     drawRef.current = draw
     draw()
-  }, [cols, rows, traces, colorKeys, tool, draftStart, selectedTraceId, selectedHole, onHoleClick, onSelect, draw])
+  }, [cols, rows, traces, colorKeys, parts, tool, draftStart, selectedTraceId, selectedPartId, selectedHole, onHoleClick, onSelect, draw])
 
   useEffect(() => {
     const frame = frameRef.current
@@ -456,17 +618,27 @@ export function ProtoboardCanvas({
         (previous != null && hole != null && sameHole(previous, hole))
       if (unchanged) return
       hoverRef.current = hole
-      const draft = modelRef.current.draftStart
+      const model = modelRef.current
+      const draft = model.draftStart
       const offAxis =
+        model.tool === "trace" &&
         hole != null &&
         draft != null &&
         !sameHole(draft, hole) &&
         !canCommit(draft, hole)
+      const partNote =
+        isPartTool(model.tool) && hole != null && draft != null && !sameHole(draft, hole)
+          ? holeOccupied(model.parts, hole)
+            ? " — pin in use"
+            : canPlacePart(draft, hole)
+              ? ""
+              : " — out of reach"
+          : ""
       setStatus(
         hole
           ? offAxis
             ? `Column ${hole.c + 1}, row ${hole.r + 1} — not on this row or column`
-            : `Column ${hole.c + 1}, row ${hole.r + 1}`
+            : `Column ${hole.c + 1}, row ${hole.r + 1}${partNote}`
           : "Drag empty board to pan. Scroll or pinch to zoom.",
       )
     }
@@ -475,16 +647,19 @@ export function ProtoboardCanvas({
       const model = modelRef.current
       const view = viewRef.current
       if (model.tool === "select") {
-        const pick = resolveSelect(localX, localY, view, model.cols, model.rows, model.traces)
+        const pick = resolveSelect(localX, localY, view, model.cols, model.rows, model.traces, model.parts)
         const hole = pick?.type === "hole" ? pick.hole : null
         const traceId = pick?.type === "trace" ? pick.id : null
+        const partId = pick?.type === "component" ? pick.id : null
         const previous = hoverRef.current
         const holeChanged =
           (previous == null) !== (hole == null) ||
           (previous != null && hole != null && !sameHole(previous, hole))
         const traceChanged = hoverTraceRef.current !== traceId
+        const partChanged = hoverPartRef.current !== partId
         hoverRef.current = hole
         hoverTraceRef.current = traceId
+        hoverPartRef.current = partId
         if (holeChanged) {
           setStatus(
             hole
@@ -492,12 +667,13 @@ export function ProtoboardCanvas({
               : "Drag empty board to pan. Scroll or pinch to zoom.",
           )
         }
-        if (holeChanged || traceChanged) drawRef.current()
+        if (holeChanged || traceChanged || partChanged) drawRef.current()
         return
       }
 
-      const traceWasHovered = hoverTraceRef.current != null
+      const traceWasHovered = hoverTraceRef.current != null || hoverPartRef.current != null
       hoverTraceRef.current = null
+      hoverPartRef.current = null
       const hole = hitHole(localX, localY, view, model.cols, model.rows)
       const previous = hoverRef.current
       publishHover(hole)
@@ -599,18 +775,26 @@ export function ProtoboardCanvas({
         if (commitClick && !activePan.moved) {
           const local = localFromClient(event.clientX, event.clientY)
           const model = modelRef.current
-          if (model.tool === "trace") {
+          if (model.tool === "trace" || isPartTool(model.tool)) {
             const hole =
               hitHole(local.x, local.y, viewRef.current, model.cols, model.rows) ?? activePan.hole
             if (hole) model.onHoleClick(hole)
           } else {
             model.onSelect(
-              resolveSelect(local.x, local.y, viewRef.current, model.cols, model.rows, model.traces),
+              resolveSelect(
+                local.x,
+                local.y,
+                viewRef.current,
+                model.cols,
+                model.rows,
+                model.traces,
+                model.parts,
+              ),
             )
           }
         }
         pan = null
-        canvas.style.cursor = modelRef.current.tool === "trace" ? "crosshair" : "default"
+        canvas.style.cursor = modelRef.current.tool === "select" ? "default" : "crosshair"
       }
       if (pointers.size < 2) pinch = null
       if (pointers.size === 1) {
@@ -657,6 +841,7 @@ export function ProtoboardCanvas({
     const onPointerLeave = () => {
       if (pan?.moved || pinch) return
       hoverTraceRef.current = null
+      hoverPartRef.current = null
       publishHover(null)
       drawRef.current()
     }
@@ -700,11 +885,13 @@ export function ProtoboardCanvas({
       <canvas
         ref={canvasRef}
         className="h-full w-full touch-none"
-        style={{ cursor: tool === "trace" ? "crosshair" : "default" }}
+        style={{ cursor: tool === "select" ? "default" : "crosshair" }}
         aria-label={
           tool === "trace"
             ? "Protoboard pin grid. PCB Trace is selected. Click a hole to start, then a hole on the same row or column to commit a trace. Drag empty board to pan."
-            : "Protoboard pin grid. Select is active. Click a trace or a pin hole. Click empty board to clear the selection. Drag empty board to pan."
+            : isPartTool(tool)
+              ? `Protoboard pin grid. ${tool[0].toUpperCase()}${tool.slice(1)} is selected. Click two pin holes within 4 steps. Drag empty board to pan.`
+              : "Protoboard pin grid. Select is active. Click a trace, component, or pin hole. Click empty board to clear the selection. Drag empty board to pan."
         }
       />
       <div className="pointer-events-none absolute inset-0">

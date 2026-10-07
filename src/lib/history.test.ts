@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { applyEdit, HISTORY_LIMIT, pushEdit, type TraceEdit } from "./history"
+import { applyBoardEdit, applyEdit, HISTORY_LIMIT, pushEdit, type BoardEdit, type TraceEdit } from "./history"
 import type { Trace } from "./board"
+import type { PlacedPart } from "./parts"
 
 function trace(id: string, c1: number, r1: number, c2: number, r2: number): Trace {
   return { id, a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
@@ -100,5 +101,43 @@ describe("trace history", () => {
     }
     expect(past).toHaveLength(HISTORY_LIMIT)
     expect(traces).toHaveLength(HISTORY_LIMIT + 5)
+  })
+})
+
+function placed(id: string, c1: number, r1: number, c2: number, r2: number): PlacedPart {
+  return { id, kind: "capacitor", a: { c: c1, r: r1 }, b: { c: c2, r: r2 } }
+}
+
+describe("component history", () => {
+  it("undoes a placement without removing other components or traces", () => {
+    const kept = placed("keep", 0, 0, 2, 0)
+    const latest = placed("new", 0, 3, 2, 5)
+    const traceItem = trace("t", 4, 0, 4, 3)
+    let state = { traces: [traceItem], components: [kept] }
+    const edit: BoardEdit = { type: "place", index: 1, component: latest }
+    state = applyBoardEdit(state, edit, "redo")
+    expect(state.components.map((item) => item.id)).toEqual(["keep", "new"])
+    state = applyBoardEdit(state, edit, "undo")
+    expect(state.components).toEqual([kept])
+    expect(state.traces).toEqual([traceItem])
+    state = applyBoardEdit(state, edit, "redo")
+    expect(state.components.map((item) => item.id)).toEqual(["keep", "new"])
+  })
+
+  it("restores a removed component and a polarized flag", () => {
+    const first = placed("a", 1, 1, 3, 2)
+    const second = { ...placed("b", 5, 1, 5, 4), polarized: true }
+    let components = [first, second]
+    const removal: BoardEdit = { type: "unplace", index: 0, component: first }
+    components = applyBoardEdit({ traces: [], components }, removal, "redo").components
+    expect(components).toEqual([second])
+    components = applyBoardEdit({ traces: [], components }, removal, "undo").components
+    expect(components).toEqual([first, second])
+
+    const flag: BoardEdit = { type: "polarize", id: "b", from: true, to: false }
+    components = applyBoardEdit({ traces: [], components }, flag, "redo").components
+    expect(components[1].polarized).toBe(false)
+    components = applyBoardEdit({ traces: [], components }, flag, "undo").components
+    expect(components[1].polarized).toBe(true)
   })
 })

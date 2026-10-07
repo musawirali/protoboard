@@ -17,6 +17,7 @@ type ChangeSizeDialogProps = {
   cols: number
   rows: number
   traceCount: number
+  partCount: number
   onResize: (cols: number, rows: number) => void
 }
 
@@ -29,8 +30,10 @@ export function ChangeSizeDialog({
   cols,
   rows,
   traceCount,
+  partCount,
   onResize,
 }: ChangeSizeDialogProps) {
+  const hasPlacements = traceCount > 0 || partCount > 0
   const [open, setOpen] = useState(false)
   const [colText, setColText] = useState(String(cols))
   const [rowText, setRowText] = useState(String(rows))
@@ -54,7 +57,7 @@ export function ChangeSizeDialog({
   }
 
   function stage(nextCols: number, nextRows: number) {
-    if (traceCount > 0) {
+    if (hasPlacements) {
       setPending({ cols: nextCols, rows: nextRows })
       return
     }
@@ -96,10 +99,10 @@ export function ChangeSizeDialog({
           {pending ? (
             <>
               <DialogHeader>
-                <DialogTitle>Clear traces and resize?</DialogTitle>
+                <DialogTitle>Clear the board and resize?</DialogTitle>
                 <DialogDescription>
                   A {pending.cols} × {pending.rows} grid replaces this board and
-                  removes {traceCount} {traceCount === 1 ? "trace" : "traces"}.
+                  removes its traces and components.
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
@@ -122,9 +125,9 @@ export function ChangeSizeDialog({
               <DialogHeader>
                 <DialogTitle>Change board size</DialogTitle>
                 <DialogDescription>
-                  {traceCount > 0
-                    ? "Pick a new pin grid. Resizing clears every trace on this board."
-                    : "Pick a new pin grid. This board has no traces yet."}
+                  {hasPlacements
+                    ? "Pick a new pin grid. Resizing clears every trace and component on this board."
+                    : "Pick a new pin grid. This board is empty."}
                 </DialogDescription>
               </DialogHeader>
               <GridSizeFields
@@ -146,7 +149,7 @@ export function ChangeSizeDialog({
                   Keep this board
                 </Button>
                 <Button type="button" onClick={submitCustom}>
-                  {traceCount > 0 ? "Review resize" : "Resize board"}
+                  {hasPlacements ? "Review resize" : "Resize board"}
                 </Button>
               </DialogFooter>
             </>

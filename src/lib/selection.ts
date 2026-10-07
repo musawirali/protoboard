@@ -1,8 +1,12 @@
 import type { Hole } from "./board"
+import type { ComponentKind } from "./parts"
 
-export type ToolName = "select" | "trace"
+export type ToolName = "select" | "trace" | ComponentKind
 
-/** A component entry is reserved so parts can be selected later without a new selection shape. */
+export function isPartTool(tool: ToolName): tool is ComponentKind {
+  return tool === "resistor" || tool === "capacitor" || tool === "diode"
+}
+
 export type Selection =
   | { type: "trace"; id: string }
   | { type: "hole"; hole: Hole }

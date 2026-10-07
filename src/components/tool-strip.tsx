@@ -74,6 +74,36 @@ export function ToolStrip({ tool, onTool }: ToolStripProps) {
           <path d="M3.4 8h9.2" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" />
         </svg>
       </ToolButton>
+      <ToolButton label="Resistor" pressed={tool === "resistor"} onClick={() => onTool("resistor")}>
+        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
+          <path
+            d="M1 8h2.2l1.1-3.1 1.7 6.2 1.7-6.2 1.7 6.2 1.1-3.1H15"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+      </ToolButton>
+      <ToolButton label="Capacitor" pressed={tool === "capacitor"} onClick={() => onTool("capacitor")}>
+        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
+          <path
+            d="M1.5 8h4.2M10.3 8H14.5M7.2 3.5v9M8.8 3.5v9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.4"
+            strokeLinecap="round"
+          />
+        </svg>
+      </ToolButton>
+      <ToolButton label="Diode" pressed={tool === "diode"} onClick={() => onTool("diode")}>
+        <svg aria-hidden viewBox="0 0 16 16" className="size-4">
+          <path d="M1.5 8h2.2" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+          <path d="M4.2 4.2 11 8 4.2 11.8Z" fill="currentColor" />
+          <path d="M11.8 4.2v7.6M12.4 8H14.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+        </svg>
+      </ToolButton>
     </div>
   )
 }
