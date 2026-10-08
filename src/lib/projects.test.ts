@@ -51,6 +51,14 @@ describe("saved projects", () => {
           b: { c: 3, r: 1 },
         },
         {
+          id: "s",
+          kind: "button",
+          name: "S1",
+          value: "",
+          a: { c: 1, r: 6 },
+          b: { c: 3, r: 8 },
+        },
+        {
           id: "c",
           kind: "capacitor",
           name: "C1",

@@ -9,10 +9,13 @@ import { ProtoboardCanvas } from "@/components/protoboard-canvas"
 import { ToolStrip } from "@/components/tool-strip"
 import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
 import { UndoBar } from "@/components/undo-bar"
-import { canCommit, holeOnSegment, sameHole, type Hole, type Trace } from "@/lib/board"
+import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
-import { assignNets, displayNetName, netColor } from "@/lib/nets"
+import { assignNets, displayNetName, netColor, traceIndexAtHole } from "@/lib/nets"
 import {
+  buttonFits,
+  buttonNetLinks,
+  buttonPins,
   canPlaceHeader,
   canPlacePart,
   componentNameTaken,
@@ -64,6 +67,7 @@ export function ProtoboardApp() {
   const [draft, setDraft] = useState<Hole | null>(null)
   const [tool, setTool] = useState<ToolName>("select")
   const [selection, setSelection] = useState<Selection | null>(null)
+  const [heldButtonId, setHeldButtonId] = useState<string | null>(null)
   const [past, setPast] = useState<BoardEdit[]>([])
   const [future, setFuture] = useState<BoardEdit[]>([])
   const historyRef = useRef({ traces, parts, past, future, selection })
@@ -138,7 +142,12 @@ export function ProtoboardApp() {
     return () => window.removeEventListener("keydown", onKey)
   }, [undo, redo])
 
-  const assignment = useMemo(() => assignNets(traces), [traces])
+  const heldButton = parts.find((part) => part.id === heldButtonId && part.kind === "button")
+  const buttonLinks = useMemo(
+    () => parts.flatMap((part) => (part.kind === "button" ? buttonNetLinks(part.a, part.id === heldButton?.id) : [])),
+    [parts, heldButton],
+  )
+  const assignment = useMemo(() => assignNets(traces, buttonLinks), [traces, buttonLinks])
 
   const legend = useMemo(() => {
     const items = new Map<number, NetLegendItem>()
@@ -165,8 +174,7 @@ export function ProtoboardApp() {
   }
 
   function netForHole(hole: Hole) {
-    const index = traces.findIndex((trace) => holeOnSegment(trace, hole))
-    return netAt(index)
+    return netAt(traceIndexAtHole(traces, hole, buttonLinks))
   }
 
   function resetEditor(cols: number, rows: number) {
@@ -178,6 +186,7 @@ export function ProtoboardApp() {
     setSelection(null)
     setPast([])
     setFuture([])
+    setHeldButtonId(null)
   }
 
   function openProject(project: SavedProject) {
@@ -198,6 +207,7 @@ export function ProtoboardApp() {
     setSelection(null)
     setPast([])
     setFuture([])
+    setHeldButtonId(null)
     setScreen("editor")
   }
 
@@ -217,6 +227,7 @@ export function ProtoboardApp() {
 
   function leaveEditor() {
     if (openId && board) storeOpen(name, board, traces, parts)
+    setHeldButtonId(null)
     setScreen("list")
     setOpenId(null)
     setBoard(null)
@@ -365,6 +376,23 @@ export function ProtoboardApp() {
       })
       return
     }
+    if (tool === "button") {
+      if (!board || !buttonFits(board.cols, board.rows, parts, hole)) return
+      const opposite = buttonPins(hole)[2]
+      commit({
+        type: "place",
+        index: parts.length,
+        component: {
+          id: crypto.randomUUID(),
+          kind: "button",
+          name: nextComponentName(parts, "button"),
+          value: "",
+          a: hole,
+          b: opposite.hole,
+        },
+      })
+      return
+    }
     if (tool === "ic") {
       if (!board) return
       const config = { pinCount: IC_DEFAULT_PINS, railDistance: IC_DEFAULT_DISTANCE, rotation: 0 as const }
@@ -475,8 +503,10 @@ export function ProtoboardApp() {
             selectedTraceId={selection?.type === "trace" ? selection.id : null}
             selectedPartId={selection?.type === "component" ? selection.id : null}
             selectedHole={selection?.type === "hole" ? selection.hole : null}
+            heldButtonId={heldButton?.id ?? null}
             onHoleClick={handleHoleClick}
             onSelect={setSelection}
+            onHoldButton={setHeldButtonId}
           />
           <ToolStrip tool={tool} onTool={chooseTool} />
         </div>

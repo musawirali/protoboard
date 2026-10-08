@@ -2,7 +2,7 @@ import { holesOnSpan, sameHole, type Hole } from "./board"
 
 export type AxialKind = "resistor" | "capacitor" | "diode" | "led"
 export type HeaderKind = "male-header" | "female-header"
-export type ComponentKind = AxialKind | HeaderKind | "ic"
+export type ComponentKind = AxialKind | HeaderKind | "ic" | "button"
 
 export type IcRotation = 0 | 90 | 180 | 270
 
@@ -39,6 +39,7 @@ const NAME_PREFIX: Record<ComponentKind, string> = {
   capacitor: "C",
   diode: "D",
   led: "L",
+  button: "S",
   "male-header": "M",
   "female-header": "F",
   ic: "I",
@@ -49,6 +50,72 @@ export const IC_DEFAULT_DISTANCE = 0
 
 export function isAxialKind(kind: ComponentKind): kind is AxialKind {
   return kind === "resistor" || kind === "capacitor" || kind === "diode" || kind === "led"
+}
+
+/**
+ * Both lead pairs are two holes apart, so one empty hole sits between the
+ * pins on an edge and between the two edges.
+ */
+export const BUTTON_ALONG = 2
+export const BUTTON_ACROSS = 2
+/**
+ * Housing in board pixels. Pins sit 28px from the center. A short horizontal
+ * lead keeps each hole outside the shell, and the shell extends past the pin
+ * rows so those leads meet the sides.
+ */
+export const BUTTON_LEAD = 10
+export const BUTTON_BODY_HALF_ACROSS = 18
+export const BUTTON_BODY_HALF_ALONG = 38
+
+export type ButtonPin = {
+  readonly number: number
+  readonly side: 1 | 2
+  readonly hole: Hole
+}
+
+/** Pin 1 is the anchor. Side 1 is that edge; side 2 is the opposite edge. */
+export function buttonPins(anchor: Hole): ButtonPin[] {
+  return [
+    { number: 1, side: 1, hole: { c: anchor.c, r: anchor.r } },
+    { number: 2, side: 1, hole: { c: anchor.c, r: anchor.r + BUTTON_ALONG } },
+    { number: 3, side: 2, hole: { c: anchor.c + BUTTON_ACROSS, r: anchor.r + BUTTON_ALONG } },
+    { number: 4, side: 2, hole: { c: anchor.c + BUTTON_ACROSS, r: anchor.r } },
+  ]
+}
+
+/** Side pairs are always shorted. A closed switch also bridges the two sides. */
+export function buttonNetLinks(anchor: Hole, closed: boolean): { a: Hole; b: Hole }[] {
+  const pins = buttonPins(anchor)
+  const side1 = pins.filter((pin) => pin.side === 1)
+  const side2 = pins.filter((pin) => pin.side === 2)
+  const links = [
+    { a: side1[0].hole, b: side1[1].hole },
+    { a: side2[0].hole, b: side2[1].hole },
+  ]
+  if (closed) {
+    for (const left of side1) {
+      for (const right of side2) links.push({ a: left.hole, b: right.hole })
+    }
+  }
+  return links
+}
+
+export function buttonFits(cols: number, rows: number, parts: readonly PlacedPart[], anchor: Hole, exceptId?: string) {
+  return buttonPins(anchor).every(
+    (pin) =>
+      pin.hole.c >= 0 &&
+      pin.hole.r >= 0 &&
+      pin.hole.c < cols &&
+      pin.hole.r < rows &&
+      !holeOccupied(parts, pin.hole, exceptId),
+  )
+}
+
+/** True when a point, in hole steps from the anchor, lands on the housing. Pin holes stay outside. */
+export function buttonBodyContains(dc: number, dr: number) {
+  const across = dc - BUTTON_ACROSS / 2
+  const along = dr - BUTTON_ALONG / 2
+  return Math.abs(across) * 28 <= BUTTON_BODY_HALF_ACROSS && Math.abs(along) * 28 <= BUTTON_BODY_HALF_ALONG
 }
 
 export function isHeaderKind(kind: ComponentKind): kind is HeaderKind {
@@ -196,6 +263,7 @@ export function partHoles(part: PlacedPart): Hole[] {
     const config = readIcConfig(part)
     return icPins(part.a, config.pinCount, config.railDistance, config.rotation)?.map((pin) => pin.hole) ?? []
   }
+  if (part.kind === "button") return buttonPins(part.a).map((pin) => pin.hole)
   return [part.a, part.b]
 }
 

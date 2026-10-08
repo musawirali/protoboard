@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  buttonMetrics,
   ceramicMetrics,
   diodeMetrics,
   electrolyticMetrics,
@@ -37,6 +38,22 @@ describe("physical part metrics", () => {
       expect(led.flatX).toBeGreaterThan(0)
       expect(led.flatX).toBeLessThan(led.radius)
     }
+  })
+
+  it("keeps the button shell still and shrinks the cap while pressed", () => {
+    const open = buttonMetrics()
+    const held = buttonMetrics(true)
+    expect(open.halfAcross).toBe(held.halfAcross)
+    expect(open.halfAlong).toBe(held.halfAlong)
+    expect(open.lead).toBe(10)
+    expect(open.halfAcross).toBe(18)
+    expect(open.halfAlong).toBe(38)
+    expect(open.halfAcross + open.lead).toBe(28)
+    expect(open.halfAlong - open.lead).toBe(28)
+    expect(open.cap).toBeCloseTo(open.halfAcross * (2 / 3))
+    expect(held.cap).toBeCloseTo(held.halfAcross * 0.5)
+    expect(open.cap).toBeLessThan(open.halfAcross)
+    expect(held.cap).toBeLessThan(open.cap)
   })
 
   it("keeps resistor bands off a hole in the middle of an even span", () => {

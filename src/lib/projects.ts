@@ -19,6 +19,7 @@ const COMPONENT_KINDS = new Set<ComponentKind>([
   "capacitor",
   "diode",
   "led",
+  "button",
   "male-header",
   "female-header",
   "ic",

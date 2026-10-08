@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
+  buttonBodyContains,
+  buttonFits,
+  buttonNetLinks,
+  buttonPins,
   canPlaceHeader,
   canPlacePart,
   componentNameTaken,
@@ -41,10 +45,41 @@ describe("component placement", () => {
     expect(nextComponentName(placed, "capacitor")).toBe("C2")
     expect(nextComponentName(placed, "diode")).toBe("D1")
     expect(nextComponentName(placed, "led")).toBe("L1")
+    expect(nextComponentName(placed, "button")).toBe("S1")
+    expect(
+      nextComponentName([...placed, { ...part("s", 5, 5, 6, 5, "S1"), kind: "button" }], "button"),
+    ).toBe("S2")
     expect(nextComponentName(placed.filter((item) => item.name !== "R1"), "resistor")).toBe("R1")
     expect(componentNameTaken(placed, "C1")).toBe(true)
     expect(componentNameTaken(placed, "C1", "c")).toBe(false)
     expect(componentNameTaken(placed, "D1")).toBe(false)
+  })
+
+  it("places a 6x6 switch as four pins, two on each side", () => {
+    const pins = buttonPins({ c: 1, r: 4 })
+    expect(pins.map((pin) => `${pin.number}:${pin.side}:${pin.hole.c},${pin.hole.r}`)).toEqual([
+      "1:1:1,4",
+      "2:1:1,6",
+      "3:2:3,6",
+      "4:2:3,4",
+    ])
+    expect(buttonBodyContains(1, 1)).toBe(true)
+    expect(buttonBodyContains(0, 0)).toBe(false)
+    expect(buttonBodyContains(2, 2)).toBe(false)
+    expect(buttonBodyContains(0, 1)).toBe(false)
+    const placed = [{ ...part("s", 1, 4, 3, 6, "S1"), kind: "button" as const }]
+    expect(holeOccupied(placed, { c: 1, r: 4 })).toBe(true)
+    expect(holeOccupied(placed, { c: 3, r: 6 })).toBe(true)
+    expect(holeOccupied(placed, { c: 2, r: 5 })).toBe(false)
+    expect(buttonFits(8, 8, [], { c: 1, r: 4 })).toBe(true)
+    expect(buttonFits(8, 8, placed, { c: 1, r: 4 })).toBe(false)
+    expect(buttonFits(6, 8, [], { c: 4, r: 6 })).toBe(false)
+    const open = buttonNetLinks({ c: 1, r: 4 }, false)
+    expect(open).toEqual([
+      { a: { c: 1, r: 4 }, b: { c: 1, r: 6 } },
+      { a: { c: 3, r: 6 }, b: { c: 3, r: 4 } },
+    ])
+    expect(buttonNetLinks({ c: 1, r: 4 }, true)).toHaveLength(6)
   })
 
   it("treats either pin as occupying the hole", () => {

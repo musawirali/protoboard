@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { holesOnSpan, type Hole, type Trace } from "@/lib/board"
-import { icPins, isAxialKind, isHeaderKind, readIcConfig, type PlacedPart } from "@/lib/parts"
+import { buttonPins, icPins, isAxialKind, isHeaderKind, readIcConfig, type PlacedPart } from "@/lib/parts"
 import type { Selection } from "@/lib/selection"
 
 type NetInfo = {
@@ -92,6 +92,7 @@ function partHeading(kind: PlacedPart["kind"]) {
   if (kind === "resistor") return "Selected resistor"
   if (kind === "capacitor") return "Selected capacitor"
   if (kind === "led") return "Selected LED"
+  if (kind === "button") return "Selected button"
   if (kind === "male-header") return "Selected male header"
   if (kind === "female-header") return "Selected female header"
   if (kind === "ic") return "Selected IC"
@@ -223,6 +224,40 @@ export function PropertiesPanel({
               })}
             </ul>
           </div>
+          <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
+            Remove
+          </Button>
+        </section>
+      )
+    }
+    if (part.kind === "button") {
+      const pins = buttonPins(part.a)
+      return (
+        <section aria-label={heading} className="rounded-lg border bg-card p-3">
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Name</span>
+            <PartTextField
+              key={`${part.id}:name:${part.name}`}
+              label="Name"
+              committed={part.name}
+              rejectEmpty
+              onCommit={(next) => onRenamePart(part.id, next)}
+            />
+          </label>
+          <dl className="mt-3 flex flex-col gap-1.5 text-sm">
+            {pins.map((pin) => {
+              const net = netForHole(pin.hole)
+              return (
+                <Row key={pin.number} label={`Pin ${pin.number}`}>
+                  <span className="block">{holeLabel(pin.hole)}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Side {pin.side === 1 ? "A" : "B"} · {net ? <NetName net={net} /> : "On no net"}
+                  </span>
+                </Row>
+              )
+            })}
+          </dl>
           <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
             Remove
           </Button>

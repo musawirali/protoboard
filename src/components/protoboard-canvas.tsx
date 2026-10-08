@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button"
 import { canCommit, isWire, sameHole, type Hole, type Trace } from "@/lib/board"
 import { assignNets, netColor } from "@/lib/nets"
 import {
+  buttonLabelTop,
   componentHitRadius,
   componentSilhouette,
+  drawButton,
   drawComponent,
   drawHeader,
   drawIc,
@@ -14,6 +16,10 @@ import {
   icLabelTop,
 } from "@/lib/part-art"
 import {
+  BUTTON_ACROSS,
+  BUTTON_ALONG,
+  buttonBodyContains,
+  buttonFits,
   canPlaceHeader,
   canPlacePart,
   holeOccupied,
@@ -53,8 +59,10 @@ type ProtoboardCanvasProps = {
   selectedTraceId: string | null
   selectedPartId: string | null
   selectedHole: Hole | null
+  heldButtonId: string | null
   onHoleClick: (hole: Hole) => void
   onSelect: (selection: Selection | null) => void
+  onHoldButton: (id: string | null) => void
 }
 
 type PanGesture = {
@@ -101,6 +109,9 @@ function canvasLabel(tool: ToolName) {
   }
   if (tool === "ic") {
     return "Protoboard pin grid. IC is selected. Click a pin hole to place pin 1. Drag empty board to pan."
+  }
+  if (tool === "button") {
+    return "Protoboard pin grid. Button is selected. Click a pin hole to place the four-pin switch. Drag empty board to pan."
   }
   const name =
     tool === "led"
@@ -161,7 +172,7 @@ function strokeWire(ctx: CanvasRenderingContext2D, start: Hole, end: Hole, color
   strokeSegment(ctx, start, end, color, WIRE)
 }
 
-function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null) {
+function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null, pressed: boolean) {
   const from = holeXY(part.a.c, part.a.r)
   const to = holeXY(part.b.c, part.b.r)
   if (part.kind === "male-header" || part.kind === "female-header") {
@@ -171,6 +182,10 @@ function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: s
   if (part.kind === "ic") {
     const config = readIcConfig(part)
     drawIc(ctx, from.x, from.y, config.pinCount, config.railDistance, config.rotation, halo)
+    return
+  }
+  if (part.kind === "button") {
+    drawButton(ctx, from.x, from.y, halo, pressed)
     return
   }
   drawComponent(ctx, part.kind, part.polarized, from.x, from.y, to.x, to.y, halo)
@@ -236,6 +251,12 @@ function hitSegmentIndex(
 function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
   let best: { part: PlacedPart; distance: number } | null = null
   for (const part of parts) {
+    if (part.kind === "button") {
+      const anchor = holeXY(part.a.c, part.a.r)
+      const inside = buttonBodyContains((worldX - anchor.x) / PITCH, (worldY - anchor.y) / PITCH)
+      if (inside && (best == null || 0 < best.distance)) best = { part, distance: 0 }
+      continue
+    }
     if (part.kind === "ic") {
       const config = readIcConfig(part)
       const anchor = holeXY(part.a.c, part.a.r)
@@ -261,6 +282,21 @@ function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
     if (distance <= limit && (best == null || distance < best.distance)) best = { part, distance }
   }
   return best?.part
+}
+
+/** Housing of a placed button. The four pin holes sit outside this rectangle. */
+function hitButton(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
+  let best: { id: string; distance: number } | null = null
+  for (const part of parts) {
+    if (part.kind !== "button") continue
+    const anchor = holeXY(part.a.c, part.a.r)
+    const dc = (worldX - anchor.x) / PITCH
+    const dr = (worldY - anchor.y) / PITCH
+    if (!buttonBodyContains(dc, dr)) continue
+    const distance = Math.hypot(dc - BUTTON_ACROSS / 2, dr - BUTTON_ALONG / 2)
+    if (best == null || distance < best.distance) best = { id: part.id, distance }
+  }
+  return best?.id ?? null
 }
 
 function resolveSelect(
@@ -324,8 +360,10 @@ export function ProtoboardCanvas({
   selectedTraceId,
   selectedPartId,
   selectedHole,
+  heldButtonId,
   onHoleClick,
   onSelect,
+  onHoldButton,
 }: ProtoboardCanvasProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -348,8 +386,10 @@ export function ProtoboardCanvas({
     selectedTraceId,
     selectedPartId,
     selectedHole,
+    heldButtonId,
     onHoleClick,
     onSelect,
+    onHoldButton,
   })
   const [status, setStatus] = useState("Drag empty board to pan. Scroll or pinch to zoom.")
 
@@ -491,7 +531,7 @@ export function ProtoboardCanvas({
       const hovered =
         model.tool === "select" && hoverPartRef.current === part.id && !selected
       const halo = selected ? "#fffef6" : hovered ? "rgba(255,255,255,0.72)" : null
-      drawPartSymbol(ctx, part, halo)
+      drawPartSymbol(ctx, part, halo, part.id === model.heldButtonId)
     }
     const axialPreview =
       isAxialTool(model.tool) &&
@@ -506,6 +546,15 @@ export function ProtoboardCanvas({
         ctx,
         { id: "preview", kind: model.tool, name: "", value: "", a: model.draftStart, b: hover },
         null,
+        false,
+      )
+    }
+    if (model.tool === "button" && hover && buttonFits(model.cols, model.rows, model.parts, hover)) {
+      drawPartSymbol(
+        ctx,
+        { id: "preview", kind: "button", name: "", value: "", a: hover, b: hover },
+        null,
+        false,
       )
     }
     if (model.tool === "ic" && hover && icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })) {
@@ -523,6 +572,7 @@ export function ProtoboardCanvas({
           rotation: 0,
         },
         null,
+        false,
       )
     }
 
@@ -583,7 +633,7 @@ export function ProtoboardCanvas({
           4,
         )
       }
-    } else if (isAxialTool(model.tool) || isHeaderTool(model.tool) || model.tool === "ic") {
+    } else if (isAxialTool(model.tool) || isHeaderTool(model.tool) || model.tool === "ic" || model.tool === "button") {
       if (model.draftStart && isAxialTool(model.tool)) {
         const start = model.draftStart
         for (let row = Math.max(0, start.r - PART_REACH); row <= Math.min(model.rows - 1, start.r + PART_REACH); row++) {
@@ -599,11 +649,13 @@ export function ProtoboardCanvas({
         markHole(model.draftStart, "rgba(255, 244, 204, 0.55)", "#fff4cc", HOVER_R, 4)
       }
       if (hover) {
-        const legal = isHeaderTool(model.tool)
-          ? model.draftStart != null && canPlaceHeader(model.parts, model.draftStart, hover)
-          : model.tool === "ic"
-            ? icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })
-            : model.draftStart != null && canPlacePart(model.draftStart, hover) && !holeOccupied(model.parts, hover)
+        const legal = model.tool === "button"
+          ? buttonFits(model.cols, model.rows, model.parts, hover)
+          : isHeaderTool(model.tool)
+            ? model.draftStart != null && canPlaceHeader(model.parts, model.draftStart, hover)
+            : model.tool === "ic"
+              ? icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })
+              : model.draftStart != null && canPlacePart(model.draftStart, hover) && !holeOccupied(model.parts, hover)
         markHole(
           hover,
           legal ? "rgba(255, 228, 64, 0.96)" : "rgba(255,255,255,0.45)",
@@ -642,6 +694,14 @@ export function ProtoboardCanvas({
         }
         if (part.name) {
           const top = icLabelTop(anchor.x, anchor.y, config.pinCount, config.railDistance, config.rotation)
+          paintUprightText(ctx, part.name, top.x, top.y - 8, 12, "bottom", "center")
+        }
+        continue
+      }
+      if (part.kind === "button") {
+        if (part.name) {
+          const anchor = holeXY(part.a.c, part.a.r)
+          const top = buttonLabelTop(anchor.x, anchor.y)
           paintUprightText(ctx, part.name, top.x, top.y - 8, 12, "bottom", "center")
         }
         continue
@@ -712,12 +772,14 @@ export function ProtoboardCanvas({
       selectedTraceId,
       selectedPartId,
       selectedHole,
+      heldButtonId,
       onHoleClick,
       onSelect,
+      onHoldButton,
     }
     drawRef.current = draw
     draw()
-  }, [cols, rows, traces, colorKeys, parts, tool, draftStart, selectedTraceId, selectedPartId, selectedHole, onHoleClick, onSelect, draw])
+  }, [cols, rows, traces, colorKeys, parts, tool, draftStart, selectedTraceId, selectedPartId, selectedHole, heldButtonId, onHoleClick, onSelect, onHoldButton, draw])
 
   useEffect(() => {
     const frame = frameRef.current
@@ -746,6 +808,21 @@ export function ProtoboardCanvas({
     const pointers = new Map<number, { x: number; y: number }>()
     let pan: PanGesture | null = null
     let pinch: PinchGesture | null = null
+    let swallowClick = false
+    let pressingId: string | null = null
+
+    const buttonAt = (localX: number, localY: number) => {
+      const view = viewRef.current
+      const worldX = (localX - view.panX) / view.zoom
+      const worldY = (localY - view.panY) / view.zoom
+      return hitButton(worldX, worldY, modelRef.current.parts)
+    }
+
+    const releaseHold = () => {
+      if (pressingId == null) return
+      pressingId = null
+      modelRef.current.onHoldButton(null)
+    }
 
     const publishHover = (hole: Hole | null) => {
       const previous = hoverRef.current
@@ -772,6 +849,8 @@ export function ProtoboardCanvas({
       } else if (isHeaderTool(model.tool) && hole != null && draft != null && !sameHole(draft, hole) && canCommit(draft, hole)) {
         partNote = canPlaceHeader(model.parts, draft, hole) ? "" : " — pin in use"
       } else if (model.tool === "ic" && hole != null && !icFits(model.cols, model.rows, model.parts, hole, { pinCount: 8, railDistance: 0, rotation: 0 })) {
+        partNote = " — does not fit"
+      } else if (model.tool === "button" && hole != null && !buttonFits(model.cols, model.rows, model.parts, hole)) {
         partNote = " — does not fit"
       }
       setStatus(
@@ -846,10 +925,28 @@ export function ProtoboardCanvas({
       canvas.setPointerCapture(event.pointerId)
       pointers.set(event.pointerId, { x: event.clientX, y: event.clientY })
       if (pointers.size >= 2) {
+        swallowClick = false
+        releaseHold()
         startPinch()
         return
       }
       const local = localFromClient(event.clientX, event.clientY)
+      const buttonId = buttonAt(local.x, local.y)
+      if (buttonId) {
+        swallowClick = true
+        pressingId = buttonId
+        modelRef.current.onHoldButton(buttonId)
+        pan = {
+          id: event.pointerId,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          originX: event.clientX,
+          originY: event.clientY,
+          moved: false,
+          hole: null,
+        }
+        return
+      }
       pan = {
         id: event.pointerId,
         lastX: event.clientX,
@@ -884,6 +981,14 @@ export function ProtoboardCanvas({
         return
       }
 
+      if (swallowClick && tracked && pan && pan.id === event.pointerId) {
+        if (pressingId) {
+          const local = localFromClient(event.clientX, event.clientY)
+          if (buttonAt(local.x, local.y) !== pressingId) releaseHold()
+        }
+        return
+      }
+
       if (tracked && pan && pan.id === event.pointerId) {
         const dx = event.clientX - pan.originX
         const dy = event.clientY - pan.originY
@@ -912,9 +1017,20 @@ export function ProtoboardCanvas({
       pointers.delete(event.pointerId)
       const activePan = pan
       if (activePan && activePan.id === event.pointerId) {
-        if (commitClick && !activePan.moved) {
+        const model = modelRef.current
+        if (swallowClick) {
+          const selectIt = commitClick && !activePan.moved && model.tool === "select"
+          swallowClick = false
+          pressingId = null
+          model.onHoldButton(null)
+          if (selectIt) {
+            const local = localFromClient(event.clientX, event.clientY)
+            model.onSelect(
+              resolveSelect(local.x, local.y, viewRef.current, model.cols, model.rows, model.traces, model.parts),
+            )
+          }
+        } else if (commitClick && !activePan.moved) {
           const local = localFromClient(event.clientX, event.clientY)
-          const model = modelRef.current
           if (model.tool === "trace" || model.tool === "wire" || isPartTool(model.tool)) {
             const hole =
               hitHole(local.x, local.y, viewRef.current, model.cols, model.rows) ?? activePan.hole
@@ -979,6 +1095,7 @@ export function ProtoboardCanvas({
     }
 
     const onPointerLeave = () => {
+      releaseHold()
       if (pan?.moved || pinch) return
       hoverTraceRef.current = null
       hoverPartRef.current = null

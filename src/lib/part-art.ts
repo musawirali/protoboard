@@ -1,4 +1,13 @@
-import { icDirections, type ComponentKind, type IcRotation } from "./parts"
+import {
+  BUTTON_ACROSS,
+  BUTTON_ALONG,
+  BUTTON_BODY_HALF_ACROSS,
+  BUTTON_BODY_HALF_ALONG,
+  BUTTON_LEAD,
+  icDirections,
+  type ComponentKind,
+  type IcRotation,
+} from "./parts"
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value))
@@ -45,6 +54,13 @@ export type LedMetrics = {
   flatX: number
 }
 
+export type ButtonMetrics = {
+  halfAcross: number
+  halfAlong: number
+  lead: number
+  cap: number
+}
+
 export function resistorMetrics(span: number, avoidCenter = false): ResistorMetrics {
   const length = fitAlong(clamp(span * 0.7, 20, 42), span)
   const radius = clamp(length * 0.26, 5.2, 7.4)
@@ -83,6 +99,18 @@ export function electrolyticMetrics(span: number): ElectrolyticMetrics {
 export function ledMetrics(span: number): LedMetrics {
   const radius = Math.min(clamp(span * 0.38, 10, 16), Math.max(7, (span - 8) / 2))
   return { radius, flatX: radius * 0.55 }
+}
+
+/** Tall 6×6 housing. A press shrinks the cap; the shell and leads stay put. */
+export function buttonMetrics(pressed = false): ButtonMetrics {
+  const halfAcross = BUTTON_BODY_HALF_ACROSS
+  const halfAlong = BUTTON_BODY_HALF_ALONG
+  return {
+    halfAcross,
+    halfAlong,
+    lead: BUTTON_LEAD,
+    cap: halfAcross * (pressed ? 0.5 : 2 / 3),
+  }
 }
 
 /** Half-size of the body along the leads and across them, in board pixels. */
@@ -288,6 +316,7 @@ function traceLed(ctx: CanvasRenderingContext2D, radius: number, flatX: number) 
   ctx.closePath()
 }
 
+
 function drawLed(ctx: CanvasRenderingContext2D, span: number, halo: string | null) {
   const { radius, flatX } = ledMetrics(span)
   if (halo) {
@@ -336,7 +365,7 @@ export function drawComponent(
   const dx = bx - ax
   const dy = by - ay
   const span = Math.hypot(dx, dy)
-  if (span < 1 || kind === "male-header" || kind === "female-header" || kind === "ic") return
+  if (span < 1 || kind === "male-header" || kind === "female-header" || kind === "ic" || kind === "button") return
   ctx.save()
   ctx.translate((ax + bx) / 2, (ay + by) / 2)
   ctx.rotate(Math.atan2(dy, dx))
@@ -354,6 +383,88 @@ export function drawComponent(
 }
 
 const PITCH = 28
+
+/** Top of the housing, used to park the name above the body. */
+export function buttonLabelTop(ax: number, ay: number) {
+  return {
+    x: ax + (BUTTON_ACROSS * PITCH) / 2,
+    y: ay + (BUTTON_ALONG * PITCH) / 2 - buttonMetrics().halfAlong,
+  }
+}
+
+/** Four-pin 6×6 housing. Horizontal leads meet the sides; the cap stays centered. */
+export function drawButton(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  halo: string | null,
+  pressed: boolean,
+) {
+  const { halfAcross, halfAlong, cap } = buttonMetrics(pressed)
+  const cx = ax + (BUTTON_ACROSS * PITCH) / 2
+  const cy = ay + (BUTTON_ALONG * PITCH) / 2
+  const pinX = (BUTTON_ACROSS * PITCH) / 2
+  const pinY = (BUTTON_ALONG * PITCH) / 2
+  const leads = [
+    { x: -pinX, y: -pinY },
+    { x: -pinX, y: pinY },
+    { x: pinX, y: -pinY },
+    { x: pinX, y: pinY },
+  ]
+  ctx.save()
+  ctx.translate(cx, cy)
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  if (halo) {
+    roundBody(ctx, -halfAcross - 3, -halfAlong - 3, halfAcross * 2 + 6, halfAlong * 2 + 6, 3)
+    ctx.strokeStyle = halo
+    ctx.lineWidth = 4
+    ctx.stroke()
+  }
+  ctx.beginPath()
+  for (const lead of leads) {
+    ctx.moveTo(Math.sign(lead.x) * (halfAcross - 1.5), lead.y)
+    ctx.lineTo(lead.x, lead.y)
+  }
+  ctx.strokeStyle = "#d5cfc3"
+  ctx.lineWidth = 1.8
+  ctx.stroke()
+  const shell = ctx.createLinearGradient(0, -halfAlong, 0, halfAlong)
+  shell.addColorStop(0, "#4a4e57")
+  shell.addColorStop(0.42, "#2a2d34")
+  shell.addColorStop(1, "#12141a")
+  roundBody(ctx, -halfAcross, -halfAlong, halfAcross * 2, halfAlong * 2, 3)
+  ctx.fillStyle = shell
+  ctx.fill()
+  ctx.strokeStyle = "#6d7582"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  const capY = pressed ? 0.8 : 0
+  const dome = ctx.createRadialGradient(-cap * 0.28, capY - cap * 0.34, cap * 0.08, 0, capY, cap)
+  if (pressed) {
+    dome.addColorStop(0, "#3a404a")
+    dome.addColorStop(0.55, "#16191f")
+    dome.addColorStop(1, "#07080b")
+  } else {
+    dome.addColorStop(0, "#d5dbe3")
+    dome.addColorStop(0.42, "#8b93a0")
+    dome.addColorStop(1, "#3e4550")
+  }
+  ctx.beginPath()
+  ctx.arc(0, capY, cap, 0, Math.PI * 2)
+  ctx.fillStyle = dome
+  ctx.fill()
+  ctx.strokeStyle = pressed ? "#0c0e12" : "#eef2f6"
+  ctx.lineWidth = pressed ? 1.4 : 1
+  ctx.stroke()
+  if (!pressed) {
+    ctx.beginPath()
+    ctx.arc(-cap * 0.22, -cap * 0.28, Math.max(1.2, cap * 0.22), 0, Math.PI * 2)
+    ctx.fillStyle = "rgba(255,255,255,0.55)"
+    ctx.fill()
+  }
+  ctx.restore()
+}
 
 export type HeaderFrame = {
   ux: number

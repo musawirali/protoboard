@@ -2,7 +2,7 @@
 
 Place straight PCB traces and jumper wires on a through-hole protoboard and see which segments belong to the same net.
 
-A trace runs along a single row or column and covers every pin hole on that span. A diagonal pair does not commit as a trace. A wire is a thin line between any two different holes, including a diagonal. Traces join a net when their spans share a hole. A wire joins when it shares an end, ends on a hole in a trace span, or crosses or overlaps another segment. Each net keeps a stable color.
+A trace runs along a single row or column and covers every pin hole on that span. A diagonal pair does not commit as a trace. A wire is a thin line between any two different holes, including a diagonal. Traces join a net when their spans share a hole. A wire joins only its start and end: a shared end, or an end that lands on a hole in a trace span. A hole the wire crosses stays off that net. Each net keeps a stable color.
 
 ## Run locally
 
@@ -19,7 +19,7 @@ The dev server listens on port **4317** and host `0.0.0.0`. Open [http://127.0.0
 npm test
 ```
 
-Unit tests cover axis-aligned spans, joins through an intermediate hole, crossings at the shared intersection hole, wire crossings, and rejection of diagonal pairs that are not wires.
+Unit tests cover axis-aligned spans, joins through an intermediate hole, crossings at the shared intersection hole, wires that join only at their ends, and rejection of diagonal pairs that are not wires.
 
 ## Usage
 

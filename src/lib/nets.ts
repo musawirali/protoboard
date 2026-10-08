@@ -1,4 +1,10 @@
-import { segmentsConnect, type Trace } from "./board"
+import { holeOnSegment, sameHole, segmentsConnect, type Hole, type Trace } from "./board"
+
+/** Two holes shorted while a switch is held. Not stored on the board. */
+export type NetLink = {
+  readonly a: Hole
+  readonly b: Hole
+}
 
 export type NetAssignment = {
   /** 1-based label per trace. Traces in one connected net share a label. */
@@ -10,12 +16,15 @@ export type NetAssignment = {
 
 /**
  * Connected components of PCB traces and wires. Two PCB traces are one net
- * when their hole spans share any pin. A wire joins when it shares an end,
- * ends on a hole in a trace span, or crosses or overlaps another segment.
- * A bare diagonal trace still covers no holes. The earliest segment stays
+ * when their hole spans share any pin. A wire joins only at its two ends:
+ * a shared end, or an end that lies on a hole another segment already joins.
+ * A hole the wire merely crosses stays off that net. A bare diagonal trace
+ * still covers no holes. The earliest segment stays
  * the root so the color does not move when a later segment joins.
+ * A link joins only the traces that already cover its two holes. It does
+ * not short holes the switch body crosses or spans between those pins.
  */
-export function assignNets(traces: readonly Trace[]): NetAssignment {
+export function assignNets(traces: readonly Trace[], links: readonly NetLink[] = []): NetAssignment {
   const count = traces.length
   const parent = Array.from({ length: count }, (_, index) => index)
 
@@ -45,6 +54,15 @@ export function assignNets(traces: readonly Trace[]): NetAssignment {
     }
   }
 
+  for (const link of links) {
+    let anchor = -1
+    for (let index = 0; index < count; index++) {
+      if (!holeOnSegment(traces[index], link.a) && !holeOnSegment(traces[index], link.b)) continue
+      if (anchor < 0) anchor = index
+      else union(anchor, index)
+    }
+  }
+
   const labels = new Array<number>(count)
   const colorKeys = new Array<number>(count)
   const labelByRoot = new Map<number, number>()
@@ -63,6 +81,19 @@ export function assignNets(traces: readonly Trace[]): NetAssignment {
   }
 
   return { labels, colorKeys, netCount }
+}
+
+/** Trace whose net this hole is on. A closed link lets a bare pin read the other pin's net. */
+export function traceIndexAtHole(traces: readonly Trace[], hole: Hole, links: readonly NetLink[] = []) {
+  const direct = traces.findIndex((trace) => holeOnSegment(trace, hole))
+  if (direct >= 0) return direct
+  for (const link of links) {
+    const other = sameHole(hole, link.a) ? link.b : sameHole(hole, link.b) ? link.a : null
+    if (!other) continue
+    const via = traces.findIndex((trace) => holeOnSegment(trace, other))
+    if (via >= 0) return via
+  }
+  return -1
 }
 
 const NET_PALETTE = [
