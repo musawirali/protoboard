@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { canCommit, isWire, sameHole, type Hole, type Trace } from "@/lib/board"
+import { canCommit, isWire, sameHole, wireJunctions, type Hole, type Trace } from "@/lib/board"
 import { assignNets, displayNetColor } from "@/lib/nets"
 import {
   buttonLabelTop,
@@ -198,6 +198,24 @@ function strokeLane(ctx: CanvasRenderingContext2D, start: Hole, end: Hole, color
 
 function strokeWire(ctx: CanvasRenderingContext2D, start: Hole, end: Hole, color: string) {
   strokeSegment(ctx, start, end, color, WIRE)
+}
+
+function strokeJunction(ctx: CanvasRenderingContext2D, hole: Hole, color: string) {
+  const { x, y } = holeXY(hole.c, hole.r)
+  ctx.beginPath()
+  ctx.arc(x, y, 4.5, 0, Math.PI * 2)
+  ctx.fillStyle = color
+  ctx.fill()
+  ctx.lineWidth = 1.25
+  ctx.strokeStyle = "#1a120c"
+  ctx.stroke()
+}
+
+function junctionColor(traces: readonly Trace[], colorKeys: readonly number[], hole: Hole) {
+  const index = traces.findIndex(
+    (trace) => isWire(trace) && (sameHole(trace.a, hole) || sameHole(trace.b, hole)),
+  )
+  return displayNetColor(traces, colorKeys, Math.max(0, index))
 }
 
 function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: string | null, pressed: boolean) {
@@ -574,10 +592,15 @@ export function ProtoboardCanvas({
       const previewKeys = assignNets(previewTraces).colorKeys
       strokeLane(ctx, model.draftStart, hover, displayNetColor(previewTraces, previewKeys, previewTraces.length - 1))
     }
+    let junctionTraces = model.traces
+    let junctionKeys = model.colorKeys
     if (model.tool === "wire" && model.draftStart && hover && !sameHole(model.draftStart, hover)) {
-      const previewTraces = [...model.traces, { a: model.draftStart, b: hover, kind: "wire" as const }]
-      const previewKeys = assignNets(previewTraces).colorKeys
-      strokeWire(ctx, model.draftStart, hover, displayNetColor(previewTraces, previewKeys, previewTraces.length - 1))
+      junctionTraces = [...model.traces, { a: model.draftStart, b: hover, kind: "wire" as const }]
+      junctionKeys = assignNets(junctionTraces).colorKeys
+      strokeWire(ctx, model.draftStart, hover, displayNetColor(junctionTraces, junctionKeys, junctionTraces.length - 1))
+    }
+    for (const hole of wireJunctions(junctionTraces)) {
+      strokeJunction(ctx, hole, junctionColor(junctionTraces, junctionKeys, hole))
     }
 
     const preview = movePreviewRef.current

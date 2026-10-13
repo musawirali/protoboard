@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { canCommit, holesOnSpan, type Trace } from "./board"
+import { canCommit, holesOnSpan, wireJunctions, type Trace } from "./board"
 import { assignNets, displayNetColor, netColor, traceIndexAtHole } from "./nets"
 import { buttonNetLinks } from "./parts"
 
@@ -136,6 +136,15 @@ describe("assignNets", () => {
     expect(end).toBeGreaterThanOrEqual(0)
     expect(nets.labels[start]).toBe(nets.labels[end])
     expect(nets.labels).toEqual([1, 1, 1])
+  })
+
+  it("marks a shared wire end and ignores a crossing", () => {
+    expect(wireJunctions([wire(0, 0, 4, 0), wire(4, 0, 4, 3)])).toEqual([{ c: 4, r: 0 }])
+    expect(wireJunctions([wire(0, 0, 4, 4), wire(0, 4, 4, 0)])).toEqual([])
+    expect(wireJunctions([wire(0, 0, 4, 0), wire(2, 0, 2, 3)])).toEqual([])
+    expect(wireJunctions([wire(0, 1, 3, 1), trace(3, 1, 3, 4)])).toEqual([])
+    const meeting = wireJunctions([wire(0, 0, 2, 0), wire(2, 0, 2, 3), wire(2, 0, 5, 0)])
+    expect(meeting).toEqual([{ c: 2, r: 0 }])
   })
 
   it("does not join segments that only cross away from a wire end", () => {

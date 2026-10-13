@@ -84,3 +84,25 @@ export function segmentsConnect(left: Trace, right: Trace) {
 export function holeOnSegment(trace: Trace, hole: Hole) {
   return joinedHoles(trace).some((pin) => sameHole(pin, hole))
 }
+
+/**
+ * Holes where at least two wires share an end and therefore join.
+ * A crossing that is not an end is not a junction.
+ */
+export function wireJunctions(traces: readonly Trace[]): Hole[] {
+  const counts = new Map<string, { hole: Hole; count: number }>()
+  for (const trace of traces) {
+    if (!isWire(trace)) continue
+    for (const hole of [trace.a, trace.b]) {
+      const key = holeKey(hole)
+      const found = counts.get(key)
+      if (found) found.count += 1
+      else counts.set(key, { hole, count: 1 })
+    }
+  }
+  const junctions: Hole[] = []
+  for (const item of counts.values()) {
+    if (item.count >= 2) junctions.push(item.hole)
+  }
+  return junctions
+}
