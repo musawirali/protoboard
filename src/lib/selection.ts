@@ -12,7 +12,14 @@ export function isHeaderTool(tool: ToolName): tool is "male-header" | "female-he
 }
 
 export function isPartTool(tool: ToolName): tool is ComponentKind {
-  return isAxialTool(tool) || isHeaderTool(tool) || tool === "ic" || tool === "button"
+  return (
+    isAxialTool(tool) ||
+    isHeaderTool(tool) ||
+    tool === "ic" ||
+    tool === "button" ||
+    tool === "potentiometer" ||
+    tool === "crystal"
+  )
 }
 
 export type Selection =

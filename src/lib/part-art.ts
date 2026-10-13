@@ -4,7 +4,12 @@ import {
   BUTTON_BODY_HALF_ACROSS,
   BUTTON_BODY_HALF_ALONG,
   BUTTON_LEAD,
+  CRYSTAL_BODY,
+  CRYSTAL_SPAN,
   icDirections,
+  POT_SHAFT,
+  POT_SHELL,
+  POT_STEP,
   turnOffset,
   type ComponentKind,
   type IcRotation,
@@ -117,7 +122,9 @@ export function buttonMetrics(pressed = false): ButtonMetrics {
 /** Half-size of the body along the leads and across them, in board pixels. */
 export function componentSilhouette(kind: ComponentKind, polarized: boolean | undefined, span: number) {
   if (kind === "male-header" || kind === "female-header") return { along: span / 2, across: 12 }
-  if (kind === "ic") return { along: span / 2, across: 12 }
+  if (kind === "ic" || kind === "button" || kind === "potentiometer" || kind === "crystal") {
+    return { along: span / 2, across: 12 }
+  }
   if (kind === "resistor") {
     const body = resistorMetrics(span)
     return { along: body.length / 2, across: body.radius }
@@ -139,7 +146,16 @@ export function componentSilhouette(kind: ComponentKind, polarized: boolean | un
 }
 
 export function componentHitRadius(kind: ComponentKind, polarized: boolean | undefined, span: number) {
-  if (kind === "male-header" || kind === "female-header" || kind === "ic") return 14
+  if (
+    kind === "male-header" ||
+    kind === "female-header" ||
+    kind === "ic" ||
+    kind === "button" ||
+    kind === "potentiometer" ||
+    kind === "crystal"
+  ) {
+    return 14
+  }
   if (kind === "resistor") return resistorMetrics(span).radius + 2
   if (kind === "diode") return diodeMetrics(span).radius + 2
   if (kind === "led") return ledMetrics(span).radius + 1.5
@@ -366,7 +382,17 @@ export function drawComponent(
   const dx = bx - ax
   const dy = by - ay
   const span = Math.hypot(dx, dy)
-  if (span < 1 || kind === "male-header" || kind === "female-header" || kind === "ic" || kind === "button") return
+  if (
+    span < 1 ||
+    kind === "male-header" ||
+    kind === "female-header" ||
+    kind === "ic" ||
+    kind === "button" ||
+    kind === "potentiometer" ||
+    kind === "crystal"
+  ) {
+    return
+  }
   ctx.save()
   ctx.translate((ax + bx) / 2, (ay + by) / 2)
   ctx.rotate(Math.atan2(dy, dx))
@@ -384,6 +410,145 @@ export function drawComponent(
 }
 
 const PITCH = 28
+
+/** Top of a fixed housing, used to park the name above the body. */
+export function fixedLabelTop(
+  ax: number,
+  ay: number,
+  rotation: IcRotation,
+  box: { left: number; right: number; top: number; bottom: number },
+) {
+  const corners = [
+    [box.left, box.top],
+    [box.right, box.top],
+    [box.left, box.bottom],
+    [box.right, box.bottom],
+  ].map(([x, y]) => turnOffset(x, y, rotation))
+  const xs = corners.map((corner) => corner.dc)
+  const ys = corners.map((corner) => corner.dr)
+  return {
+    x: ax + (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: ay + Math.min(...ys),
+  }
+}
+
+function drawFixedLeads(ctx: CanvasRenderingContext2D, xs: number[], bottom: number) {
+  ctx.beginPath()
+  for (const x of xs) {
+    ctx.moveTo(x, -4)
+    ctx.lineTo(x, bottom)
+  }
+  ctx.strokeStyle = "#d5cfc3"
+  ctx.lineWidth = 1.8
+  ctx.stroke()
+}
+
+/** Three-pin pot. The shaft leaves the body in the same direction as the leads. */
+export function drawPot(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  halo: string | null,
+  rotation: IcRotation = 0,
+) {
+  const pins = [0, POT_STEP * 28, POT_STEP * 2 * 28]
+  const { left, right, top, bottom } = POT_SHELL
+  const shaftX = POT_SHAFT.left
+  const shaftW = POT_SHAFT.right - POT_SHAFT.left
+  const shaftPath = (y: number, height: number) => {
+    const radius = shaftW / 2
+    ctx.beginPath()
+    ctx.moveTo(shaftX, y)
+    ctx.lineTo(shaftX + shaftW, y)
+    ctx.lineTo(shaftX + shaftW, y + height - radius)
+    ctx.arc(shaftX + radius, y + height - radius, radius, 0, Math.PI, false)
+    ctx.closePath()
+  }
+  ctx.save()
+  ctx.translate(ax, ay)
+  ctx.rotate((rotation * Math.PI) / 180)
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  if (halo) {
+    ctx.strokeStyle = halo
+    ctx.lineWidth = 4
+    roundBody(ctx, left - 3, top - 3, right - left + 6, bottom - top + 6, 8)
+    ctx.stroke()
+    shaftPath(bottom - 3, POT_SHAFT.bottom - bottom + 6)
+    ctx.stroke()
+  }
+  drawFixedLeads(ctx, [pins[0], pins[2]], bottom)
+  const shell = ctx.createLinearGradient(0, top, 0, bottom)
+  shell.addColorStop(0, "#3d6ea8")
+  shell.addColorStop(0.45, "#1d4e89")
+  shell.addColorStop(1, "#0d2748")
+  roundBody(ctx, left, top, right - left, bottom - top, 7)
+  ctx.fillStyle = shell
+  ctx.fill()
+  ctx.strokeStyle = "#8eb4dc"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(left + 10, top + 10, 2.2, 0, Math.PI * 2)
+  ctx.fillStyle = "#f4efe2"
+  ctx.fill()
+  const metal = ctx.createLinearGradient(shaftX, 0, shaftX + shaftW, 0)
+  metal.addColorStop(0, "#6f685e")
+  metal.addColorStop(0.45, "#e8e2d6")
+  metal.addColorStop(1, "#8a8376")
+  shaftPath(bottom - 2, POT_SHAFT.bottom - (bottom - 2))
+  ctx.fillStyle = metal
+  ctx.fill()
+  ctx.strokeStyle = "#3e3933"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.restore()
+}
+
+/** HC-49 can. The body overhangs the leads; the pin holes stay below it. */
+export function drawCrystal(
+  ctx: CanvasRenderingContext2D,
+  ax: number,
+  ay: number,
+  halo: string | null,
+  rotation: IcRotation = 0,
+) {
+  const { left, right, top, bottom } = CRYSTAL_BODY
+  const width = right - left
+  const height = bottom - top
+  const pins = [0, CRYSTAL_SPAN * 28]
+  ctx.save()
+  ctx.translate(ax, ay)
+  ctx.rotate((rotation * Math.PI) / 180)
+  ctx.lineCap = "round"
+  ctx.lineJoin = "round"
+  if (halo) {
+    roundBody(ctx, left - 3, top - 3, width + 6, height + 6, 10)
+    ctx.strokeStyle = halo
+    ctx.lineWidth = 4
+    ctx.stroke()
+  }
+  drawFixedLeads(ctx, pins, bottom)
+  const metal = ctx.createLinearGradient(left, 0, right, 0)
+  metal.addColorStop(0, "#8d9298")
+  metal.addColorStop(0.18, "#f4f6f8")
+  metal.addColorStop(0.5, "#c5cacf")
+  metal.addColorStop(0.82, "#f7f8f9")
+  metal.addColorStop(1, "#7e848b")
+  roundBody(ctx, left, top, width, height, 8)
+  ctx.fillStyle = metal
+  ctx.fill()
+  ctx.strokeStyle = "#5c636b"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.moveTo(left + 6, bottom - 8)
+  ctx.lineTo(right - 6, bottom - 8)
+  ctx.strokeStyle = "#6a7178"
+  ctx.lineWidth = 1
+  ctx.stroke()
+  ctx.restore()
+}
 
 /** Top of the housing, used to park the name above the body. */
 export function buttonLabelTop(ax: number, ay: number, rotation: IcRotation = 0) {

@@ -2,7 +2,7 @@ import { holesOnSpan, sameHole, type Hole } from "./board"
 
 export type AxialKind = "resistor" | "capacitor" | "diode" | "led"
 export type HeaderKind = "male-header" | "female-header"
-export type ComponentKind = AxialKind | HeaderKind | "ic" | "button"
+export type ComponentKind = AxialKind | HeaderKind | "ic" | "button" | "potentiometer" | "crystal"
 
 export type IcRotation = 0 | 90 | 180 | 270
 
@@ -40,6 +40,8 @@ const NAME_PREFIX: Record<ComponentKind, string> = {
   diode: "D",
   led: "L",
   button: "S",
+  potentiometer: "RV",
+  crystal: "Y",
   "male-header": "M",
   "female-header": "F",
   ic: "I",
@@ -66,6 +68,25 @@ export const BUTTON_ACROSS = 2
 export const BUTTON_LEAD = 10
 export const BUTTON_BODY_HALF_ACROSS = 18
 export const BUTTON_BODY_HALF_ALONG = 38
+
+/** One empty hole between pins. Three pins then cover five holes: pin, gap, pin, gap, pin. */
+export const POT_STEP = 2
+/** Body above the pin row, in pixels from pin 1. The pin holes stay outside it. */
+export const POT_SHELL = { left: -16, right: 122, top: -70, bottom: -12 }
+/** Shaft from the body edge, through the center pin, and out past the pin row. */
+export const POT_SHAFT = { left: 48, right: 64, top: -12, bottom: 50 }
+/** Bounds of the body plus the shaft, used to park the name. */
+export const POT_BODY = {
+  left: POT_SHELL.left,
+  right: POT_SHELL.right,
+  top: POT_SHELL.top,
+  bottom: POT_SHAFT.bottom,
+}
+
+/** One empty hole between the two leads of an HC-49 can. */
+export const CRYSTAL_SPAN = 2
+/** Body in pixels from pin 1, before rotation. The pin row is y = 0. */
+export const CRYSTAL_BODY = { left: -14, right: 70, top: -82, bottom: -12 }
 
 export type ButtonPin = {
   readonly number: number
@@ -162,6 +183,82 @@ export function buttonBodyContains(dc: number, dr: number, rotation: IcRotation 
   const across = local.dc - BUTTON_ACROSS / 2
   const along = local.dr - BUTTON_ALONG / 2
   return Math.abs(across) * 28 <= BUTTON_BODY_HALF_ACROSS && Math.abs(along) * 28 <= BUTTON_BODY_HALF_ALONG
+}
+
+export type PotPin = {
+  readonly number: number
+  readonly hole: Hole
+}
+
+/** Pin 1 is the anchor. Pin 2 is the wiper, one empty hole from either end. */
+export function potPins(anchor: Hole, rotation: IcRotation = 0): PotPin[] {
+  return [0, 1, 2].map((index) => {
+    const turned = turnOffset(index * POT_STEP, 0, rotation)
+    return { number: index + 1, hole: { c: anchor.c + turned.dc, r: anchor.r + turned.dr } }
+  })
+}
+
+export function potFits(
+  cols: number,
+  rows: number,
+  parts: readonly PlacedPart[],
+  anchor: Hole,
+  exceptId?: string,
+  rotation: IcRotation = 0,
+) {
+  return potPins(anchor, rotation).every(
+    (pin) => holeOnBoard(cols, rows, pin.hole) && !holeOccupied(parts, pin.hole, exceptId),
+  )
+}
+
+function inPixelBox(
+  x: number,
+  y: number,
+  box: { left: number; right: number; top: number; bottom: number },
+) {
+  return x >= box.left && x <= box.right && y >= box.top && y <= box.bottom
+}
+
+/** True when a point, in hole steps from the anchor, lands on the body or the shaft. Pin holes stay outside. */
+export function potBodyContains(dc: number, dr: number, rotation: IcRotation = 0) {
+  const local = unturnOffset(dc, dr, rotation)
+  const x = local.dc * 28
+  const y = local.dr * 28
+  return inPixelBox(x, y, POT_SHELL) || inPixelBox(x, y, POT_SHAFT)
+}
+
+export type CrystalPin = {
+  readonly number: number
+  readonly hole: Hole
+}
+
+/** Pin 1 is the anchor. Pin 2 is one empty hole away. */
+export function crystalPins(anchor: Hole, rotation: IcRotation = 0): CrystalPin[] {
+  return [0, CRYSTAL_SPAN].map((step, index) => {
+    const turned = turnOffset(step, 0, rotation)
+    return { number: index + 1, hole: { c: anchor.c + turned.dc, r: anchor.r + turned.dr } }
+  })
+}
+
+export function crystalFits(
+  cols: number,
+  rows: number,
+  parts: readonly PlacedPart[],
+  anchor: Hole,
+  exceptId?: string,
+  rotation: IcRotation = 0,
+) {
+  return crystalPins(anchor, rotation).every(
+    (pin) => holeOnBoard(cols, rows, pin.hole) && !holeOccupied(parts, pin.hole, exceptId),
+  )
+}
+
+/** True when a point, in hole steps from the anchor, lands on the can. Pin holes stay outside. */
+export function crystalBodyContains(dc: number, dr: number, rotation: IcRotation = 0) {
+  const local = unturnOffset(dc, dr, rotation)
+  const x = local.dc * 28
+  const y = local.dr * 28
+  return x >= CRYSTAL_BODY.left && x <= CRYSTAL_BODY.right && y >= CRYSTAL_BODY.top && y <= CRYSTAL_BODY.bottom
 }
 
 export function isHeaderKind(kind: ComponentKind): kind is HeaderKind {
@@ -310,6 +407,8 @@ export function partHoles(part: PlacedPart): Hole[] {
     return icPins(part.a, config.pinCount, config.railDistance, config.rotation)?.map((pin) => pin.hole) ?? []
   }
   if (part.kind === "button") return buttonPins(part.a, part.rotation ?? 0).map((pin) => pin.hole)
+  if (part.kind === "potentiometer") return potPins(part.a, part.rotation ?? 0).map((pin) => pin.hole)
+  if (part.kind === "crystal") return crystalPins(part.a, part.rotation ?? 0).map((pin) => pin.hole)
   return [part.a, part.b]
 }
 
@@ -336,6 +435,8 @@ function holeOnBoard(cols: number, rows: number, hole: Hole) {
 /** True when every pin of this part lands on a free hole. The part does not block itself. */
 export function partFits(cols: number, rows: number, parts: readonly PlacedPart[], part: PlacedPart) {
   if (part.kind === "button") return buttonFits(cols, rows, parts, part.a, part.id, part.rotation ?? 0)
+  if (part.kind === "potentiometer") return potFits(cols, rows, parts, part.a, part.id, part.rotation ?? 0)
+  if (part.kind === "crystal") return crystalFits(cols, rows, parts, part.a, part.id, part.rotation ?? 0)
   if (part.kind === "ic") {
     const config = readIcConfig(part)
     return icFits(cols, rows, parts, part.a, config, part.id)
@@ -351,10 +452,12 @@ export function partFits(cols: number, rows: number, parts: readonly PlacedPart[
 
 /** Clockwise quarter-turn around pin 1. The anchor stays. */
 export function turnPart(part: PlacedPart): PlacedPart {
-  if (part.kind === "button" || part.kind === "ic") {
+  if (part.kind === "button" || part.kind === "ic" || part.kind === "potentiometer" || part.kind === "crystal") {
     const rotation = (((part.rotation ?? 0) + 90) % 360) as IcRotation
     const next = { ...part, rotation }
     if (part.kind === "button") return { ...next, b: buttonPins(part.a, rotation)[2].hole }
+    if (part.kind === "potentiometer") return { ...next, b: potPins(part.a, rotation)[2].hole }
+    if (part.kind === "crystal") return { ...next, b: crystalPins(part.a, rotation)[1].hole }
     return next
   }
   const turned = turnOffset(part.b.c - part.a.c, part.b.r - part.a.r, 90)

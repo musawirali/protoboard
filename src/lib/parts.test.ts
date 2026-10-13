@@ -4,6 +4,12 @@ import {
   buttonFits,
   buttonNetLinks,
   buttonPins,
+  crystalBodyContains,
+  crystalFits,
+  crystalPins,
+  potBodyContains,
+  potFits,
+  potPins,
   canPlaceHeader,
   canPlacePart,
   componentNameTaken,
@@ -49,6 +55,8 @@ describe("component placement", () => {
     expect(nextComponentName(placed, "diode")).toBe("D1")
     expect(nextComponentName(placed, "led")).toBe("L1")
     expect(nextComponentName(placed, "button")).toBe("S1")
+    expect(nextComponentName(placed, "potentiometer")).toBe("RV1")
+    expect(nextComponentName(placed, "crystal")).toBe("Y1")
     expect(
       nextComponentName([...placed, { ...part("s", 5, 5, 6, 5, "S1"), kind: "button" }], "button"),
     ).toBe("S2")
@@ -119,6 +127,49 @@ describe("component placement", () => {
       { a: { c: 3, r: 6 }, b: { c: 3, r: 4 } },
     ])
     expect(buttonNetLinks({ c: 1, r: 4 }, true)).toHaveLength(6)
+  })
+
+  it("places a potentiometer across five holes with a gap between each pin", () => {
+    const pins = potPins({ c: 1, r: 2 })
+    expect(pins.map((pin) => `${pin.number}:${pin.hole.c},${pin.hole.r}`)).toEqual(["1:1,2", "2:3,2", "3:5,2"])
+    expect(potBodyContains(2, -1)).toBe(true)
+    expect(potBodyContains(2, 1)).toBe(true)
+    expect(potBodyContains(0, 0)).toBe(false)
+    expect(potBodyContains(1, 0)).toBe(false)
+    expect(potBodyContains(4, 0)).toBe(false)
+    const placed = [{ ...part("rv", 1, 2, 5, 2, "RV1"), kind: "potentiometer" as const }]
+    expect(holeOccupied(placed, { c: 1, r: 2 })).toBe(true)
+    expect(holeOccupied(placed, { c: 3, r: 2 })).toBe(true)
+    expect(holeOccupied(placed, { c: 5, r: 2 })).toBe(true)
+    expect(holeOccupied(placed, { c: 2, r: 2 })).toBe(false)
+    expect(holeOccupied(placed, { c: 4, r: 2 })).toBe(false)
+    expect(potFits(8, 8, [], { c: 1, r: 2 })).toBe(true)
+    expect(potFits(8, 8, placed, { c: 1, r: 2 })).toBe(false)
+    expect(potFits(6, 8, [], { c: 2, r: 2 })).toBe(false)
+    const turned = turnPart(placed[0])
+    expect(potPins(turned.a, turned.rotation).map((pin) => `${pin.hole.c},${pin.hole.r}`)).toEqual([
+      "1,2",
+      "1,4",
+      "1,6",
+    ])
+  })
+
+  it("places a crystal with one empty hole between its leads", () => {
+    const pins = crystalPins({ c: 2, r: 3 })
+    expect(pins.map((pin) => `${pin.number}:${pin.hole.c},${pin.hole.r}`)).toEqual(["1:2,3", "2:4,3"])
+    expect(crystalBodyContains(1, -1)).toBe(true)
+    expect(crystalBodyContains(0, 0)).toBe(false)
+    expect(crystalBodyContains(1, 0)).toBe(false)
+    const placed = [{ ...part("y", 2, 3, 4, 3, "Y1"), kind: "crystal" as const }]
+    expect(holeOccupied(placed, { c: 2, r: 3 })).toBe(true)
+    expect(holeOccupied(placed, { c: 4, r: 3 })).toBe(true)
+    expect(holeOccupied(placed, { c: 3, r: 3 })).toBe(false)
+    expect(crystalFits(8, 8, [], { c: 2, r: 3 })).toBe(true)
+    expect(crystalFits(8, 8, placed, { c: 2, r: 3 })).toBe(false)
+    expect(crystalFits(4, 8, [], { c: 3, r: 1 })).toBe(false)
+    const turned = turnPart(placed[0])
+    expect(crystalPins(turned.a, turned.rotation).map((pin) => `${pin.hole.c},${pin.hole.r}`)).toEqual(["2,3", "2,5"])
+    expect(partFits(8, 8, [], turnPart(turnPart(turnPart(turned))))).toBe(true)
   })
 
   it("treats either pin as occupying the hole", () => {

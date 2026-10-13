@@ -10,8 +10,11 @@ import {
   componentSilhouette,
   drawButton,
   drawComponent,
+  drawCrystal,
   drawHeader,
   drawIc,
+  drawPot,
+  fixedLabelTop,
   headerLabelTop,
   icLabelTop,
 } from "@/lib/part-art"
@@ -23,6 +26,10 @@ import {
   buttonLocal,
   canPlaceHeader,
   canPlacePart,
+  crystalBodyContains,
+  crystalFits,
+  crystalPins,
+  CRYSTAL_BODY,
   holeOccupied,
   icBodyContains,
   icDirections,
@@ -30,6 +37,10 @@ import {
   icPins,
   PART_REACH,
   partFits,
+  potBodyContains,
+  potFits,
+  potPins,
+  POT_BODY,
   readIcConfig,
   translatePart,
   type PlacedPart,
@@ -124,6 +135,12 @@ function canvasLabel(tool: ToolName) {
   if (tool === "button") {
     return "Protoboard pin grid. Button is selected. Click a pin hole to place the four-pin switch. Drag empty board to pan."
   }
+  if (tool === "potentiometer") {
+    return "Protoboard pin grid. Potentiometer is selected. Click a pin hole to place pin 1. The three pins span five holes. Drag empty board to pan."
+  }
+  if (tool === "crystal") {
+    return "Protoboard pin grid. Crystal is selected. Click a pin hole to place pin 1. One empty hole sits between the leads. Drag empty board to pan."
+  }
   const name =
     tool === "led"
       ? "LED"
@@ -199,6 +216,14 @@ function drawPartSymbol(ctx: CanvasRenderingContext2D, part: PlacedPart, halo: s
     drawButton(ctx, from.x, from.y, halo, pressed, part.rotation ?? 0)
     return
   }
+  if (part.kind === "potentiometer") {
+    drawPot(ctx, from.x, from.y, halo, part.rotation ?? 0)
+    return
+  }
+  if (part.kind === "crystal") {
+    drawCrystal(ctx, from.x, from.y, halo, part.rotation ?? 0)
+    return
+  }
   drawComponent(ctx, part.kind, part.polarized, from.x, from.y, to.x, to.y, halo)
 }
 
@@ -262,6 +287,15 @@ function hitSegmentIndex(
 function hitPart(worldX: number, worldY: number, parts: readonly PlacedPart[]) {
   let best: { part: PlacedPart; distance: number } | null = null
   for (const part of parts) {
+    if (part.kind === "potentiometer" || part.kind === "crystal") {
+      const anchor = holeXY(part.a.c, part.a.r)
+      const inside =
+        part.kind === "potentiometer"
+          ? potBodyContains((worldX - anchor.x) / PITCH, (worldY - anchor.y) / PITCH, part.rotation ?? 0)
+          : crystalBodyContains((worldX - anchor.x) / PITCH, (worldY - anchor.y) / PITCH, part.rotation ?? 0)
+      if (inside && (best == null || 0 < best.distance)) best = { part, distance: 0 }
+      continue
+    }
     if (part.kind === "button") {
       const anchor = holeXY(part.a.c, part.a.r)
       const inside = buttonBodyContains(
@@ -581,6 +615,22 @@ export function ProtoboardCanvas({
         false,
       )
     }
+    if (model.tool === "potentiometer" && hover && potFits(model.cols, model.rows, model.parts, hover)) {
+      drawPartSymbol(
+        ctx,
+        { id: "preview", kind: "potentiometer", name: "", value: "", a: hover, b: potPins(hover)[2].hole },
+        null,
+        false,
+      )
+    }
+    if (model.tool === "crystal" && hover && crystalFits(model.cols, model.rows, model.parts, hover)) {
+      drawPartSymbol(
+        ctx,
+        { id: "preview", kind: "crystal", name: "", value: "", a: hover, b: crystalPins(hover)[1].hole },
+        null,
+        false,
+      )
+    }
     if (model.tool === "button" && hover && buttonFits(model.cols, model.rows, model.parts, hover)) {
       drawPartSymbol(
         ctx,
@@ -665,7 +715,14 @@ export function ProtoboardCanvas({
           4,
         )
       }
-    } else if (isAxialTool(model.tool) || isHeaderTool(model.tool) || model.tool === "ic" || model.tool === "button") {
+    } else if (
+      isAxialTool(model.tool) ||
+      isHeaderTool(model.tool) ||
+      model.tool === "ic" ||
+      model.tool === "button" ||
+      model.tool === "potentiometer" ||
+      model.tool === "crystal"
+    ) {
       if (model.draftStart && isAxialTool(model.tool)) {
         const start = model.draftStart
         for (let row = Math.max(0, start.r - PART_REACH); row <= Math.min(model.rows - 1, start.r + PART_REACH); row++) {
@@ -683,7 +740,11 @@ export function ProtoboardCanvas({
       if (hover) {
         const legal = model.tool === "button"
           ? buttonFits(model.cols, model.rows, model.parts, hover)
-          : isHeaderTool(model.tool)
+          : model.tool === "potentiometer"
+            ? potFits(model.cols, model.rows, model.parts, hover)
+            : model.tool === "crystal"
+              ? crystalFits(model.cols, model.rows, model.parts, hover)
+              : isHeaderTool(model.tool)
             ? model.draftStart != null && canPlaceHeader(model.parts, model.draftStart, hover)
             : model.tool === "ic"
               ? icFits(model.cols, model.rows, model.parts, hover, { pinCount: 8, railDistance: 0, rotation: 0 })
@@ -735,6 +796,21 @@ export function ProtoboardCanvas({
           const anchor = holeXY(part.a.c, part.a.r)
           const top = buttonLabelTop(anchor.x, anchor.y, part.rotation ?? 0)
           paintUprightText(ctx, part.name, top.x, top.y - 8, 12, "bottom", "center")
+        }
+        continue
+      }
+      if (part.kind === "potentiometer" || part.kind === "crystal") {
+        if (part.name || part.value) {
+          const anchor = holeXY(part.a.c, part.a.r)
+          const box = part.kind === "potentiometer" ? POT_BODY : CRYSTAL_BODY
+          const top = fixedLabelTop(anchor.x, anchor.y, part.rotation ?? 0, box)
+          const lines = part.value ? [part.name, part.value] : [part.name]
+          let baseline = top.y - 8
+          for (let index = lines.length - 1; index >= 0; index -= 1) {
+            if (!lines[index]) continue
+            paintUprightText(ctx, lines[index], top.x, baseline, 12, "bottom", "center")
+            baseline -= 13
+          }
         }
         continue
       }

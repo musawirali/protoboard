@@ -2,7 +2,16 @@ import { useState, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { holesOnSpan, type Hole, type Trace } from "@/lib/board"
-import { buttonPins, icPins, isAxialKind, isHeaderKind, readIcConfig, type PlacedPart } from "@/lib/parts"
+import {
+  buttonPins,
+  crystalPins,
+  icPins,
+  isAxialKind,
+  isHeaderKind,
+  potPins,
+  readIcConfig,
+  type PlacedPart,
+} from "@/lib/parts"
 import type { Selection } from "@/lib/selection"
 
 type NetInfo = {
@@ -93,6 +102,8 @@ function partHeading(kind: PlacedPart["kind"]) {
   if (kind === "capacitor") return "Selected capacitor"
   if (kind === "led") return "Selected LED"
   if (kind === "button") return "Selected button"
+  if (kind === "potentiometer") return "Selected potentiometer"
+  if (kind === "crystal") return "Selected crystal"
   if (kind === "male-header") return "Selected male header"
   if (kind === "female-header") return "Selected female header"
   if (kind === "ic") return "Selected IC"
@@ -224,6 +235,52 @@ export function PropertiesPanel({
               })}
             </ul>
           </div>
+          <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
+            Remove
+          </Button>
+        </section>
+      )
+    }
+    if (part.kind === "potentiometer" || part.kind === "crystal") {
+      const pins = part.kind === "potentiometer" ? potPins(part.a, part.rotation ?? 0) : crystalPins(part.a, part.rotation ?? 0)
+      return (
+        <section aria-label={heading} className="rounded-lg border bg-card p-3">
+          <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Name</span>
+            <PartTextField
+              key={`${part.id}:name:${part.name}`}
+              label="Name"
+              committed={part.name}
+              rejectEmpty
+              onCommit={(next) => onRenamePart(part.id, next)}
+            />
+          </label>
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-muted-foreground">Value</span>
+            <PartTextField
+              key={`${part.id}:value:${part.value}`}
+              label="Value"
+              committed={part.value}
+              rejectEmpty={false}
+              onCommit={(next) => {
+                onValuePart(part.id, next)
+                return true
+              }}
+            />
+          </label>
+          <dl className="mt-3 flex flex-col gap-1.5 text-sm">
+            {pins.map((pin) => {
+              const net = netForHole(pin.hole)
+              const role = part.kind === "potentiometer" && pin.number === 2 ? "Wiper" : null
+              return (
+                <Row key={pin.number} label={role ? `Pin ${pin.number}, ${role}` : `Pin ${pin.number}`}>
+                  <span className="block">{holeLabel(pin.hole)}</span>
+                  <span className="block text-xs text-muted-foreground">{net ? <NetName net={net} /> : "On no net"}</span>
+                </Row>
+              )
+            })}
+          </dl>
           <Button type="button" variant="destructive" className="mt-3 h-11 w-full" onClick={() => onRemovePart(part.id)}>
             Remove
           </Button>

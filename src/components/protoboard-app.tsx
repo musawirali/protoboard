@@ -17,6 +17,8 @@ import {
   buttonNetLinks,
   buttonPins,
   canPlaceHeader,
+  crystalFits,
+  crystalPins,
   canPlacePart,
   componentNameTaken,
   holeOccupied,
@@ -25,6 +27,8 @@ import {
   icFits,
   nextComponentName,
   partFits,
+  potFits,
+  potPins,
   readIcConfig,
   turnPart,
   validPinCount,
@@ -449,6 +453,38 @@ export function ProtoboardApp() {
         a: draft,
         b: hole,
         ...(tool === "wire" ? { kind: "wire" as const } : {}),
+      })
+      return
+    }
+    if (tool === "potentiometer") {
+      if (!board || !potFits(board.cols, board.rows, parts, hole)) return
+      commit({
+        type: "place",
+        index: parts.length,
+        component: {
+          id: crypto.randomUUID(),
+          kind: "potentiometer",
+          name: nextComponentName(parts, "potentiometer"),
+          value: "",
+          a: hole,
+          b: potPins(hole)[2].hole,
+        },
+      })
+      return
+    }
+    if (tool === "crystal") {
+      if (!board || !crystalFits(board.cols, board.rows, parts, hole)) return
+      commit({
+        type: "place",
+        index: parts.length,
+        component: {
+          id: crypto.randomUUID(),
+          kind: "crystal",
+          name: nextComponentName(parts, "crystal"),
+          value: "",
+          a: hole,
+          b: crystalPins(hole)[1].hole,
+        },
       })
       return
     }
