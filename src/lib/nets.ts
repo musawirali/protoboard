@@ -136,3 +136,16 @@ export function netColor(colorKey: number) {
   const hue = (colorKey * 137.508) % 360
   return `hsl(${hue} 90% 64%)`
 }
+
+export function isNetColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value)
+}
+
+/** Color shown for a trace's net: a custom color on that net, or the palette color. */
+export function displayNetColor(traces: readonly Trace[], colorKeys: readonly number[], index: number) {
+  const colorKey = colorKeys[index]
+  if (colorKey == null) return netColor(0)
+  const chosen = traces[colorKey]?.color ?? traces.find((trace, member) => colorKeys[member] === colorKey && trace.color)?.color
+  if (chosen && isNetColor(chosen)) return chosen
+  return netColor(colorKey)
+}

@@ -5,6 +5,7 @@ import {
   BUTTON_BODY_HALF_ALONG,
   BUTTON_LEAD,
   icDirections,
+  turnOffset,
   type ComponentKind,
   type IcRotation,
 } from "./parts"
@@ -385,10 +386,21 @@ export function drawComponent(
 const PITCH = 28
 
 /** Top of the housing, used to park the name above the body. */
-export function buttonLabelTop(ax: number, ay: number) {
+export function buttonLabelTop(ax: number, ay: number, rotation: IcRotation = 0) {
+  const { halfAcross, halfAlong } = buttonMetrics()
+  const cx = (BUTTON_ACROSS * PITCH) / 2
+  const cy = (BUTTON_ALONG * PITCH) / 2
+  const corners = [
+    [cx - halfAcross, cy - halfAlong],
+    [cx + halfAcross, cy - halfAlong],
+    [cx - halfAcross, cy + halfAlong],
+    [cx + halfAcross, cy + halfAlong],
+  ].map(([x, y]) => turnOffset(x, y, rotation))
+  const xs = corners.map((corner) => corner.dc)
+  const ys = corners.map((corner) => corner.dr)
   return {
-    x: ax + (BUTTON_ACROSS * PITCH) / 2,
-    y: ay + (BUTTON_ALONG * PITCH) / 2 - buttonMetrics().halfAlong,
+    x: ax + (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: ay + Math.min(...ys),
   }
 }
 
@@ -399,10 +411,11 @@ export function drawButton(
   ay: number,
   halo: string | null,
   pressed: boolean,
+  rotation: IcRotation = 0,
 ) {
   const { halfAcross, halfAlong, cap } = buttonMetrics(pressed)
-  const cx = ax + (BUTTON_ACROSS * PITCH) / 2
-  const cy = ay + (BUTTON_ALONG * PITCH) / 2
+  const cx = (BUTTON_ACROSS * PITCH) / 2
+  const cy = (BUTTON_ALONG * PITCH) / 2
   const pinX = (BUTTON_ACROSS * PITCH) / 2
   const pinY = (BUTTON_ALONG * PITCH) / 2
   const leads = [
@@ -412,6 +425,8 @@ export function drawButton(
     { x: pinX, y: pinY },
   ]
   ctx.save()
+  ctx.translate(ax, ay)
+  ctx.rotate((rotation * Math.PI) / 180)
   ctx.translate(cx, cy)
   ctx.lineCap = "round"
   ctx.lineJoin = "round"

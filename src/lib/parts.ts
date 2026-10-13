@@ -73,19 +73,52 @@ export type ButtonPin = {
   readonly hole: Hole
 }
 
+/** One clockwise quarter-turn. Screen rows increase downward, matching the IC. */
+export function turnOffset(dc: number, dr: number, rotation: IcRotation = 90) {
+  let x = dc
+  let y = dr
+  const steps = ((rotation / 90) % 4 + 4) % 4
+  for (let index = 0; index < steps; index++) {
+    const nextX = -y
+    y = x
+    x = nextX
+  }
+  return { dc: x, dr: y }
+}
+
+function unturnOffset(dc: number, dr: number, rotation: IcRotation) {
+  let x = dc
+  let y = dr
+  const steps = ((rotation / 90) % 4 + 4) % 4
+  for (let index = 0; index < steps; index++) {
+    const nextX = y
+    y = -x
+    x = nextX
+  }
+  return { dc: x, dr: y }
+}
+
 /** Pin 1 is the anchor. Side 1 is that edge; side 2 is the opposite edge. */
-export function buttonPins(anchor: Hole): ButtonPin[] {
-  return [
-    { number: 1, side: 1, hole: { c: anchor.c, r: anchor.r } },
-    { number: 2, side: 1, hole: { c: anchor.c, r: anchor.r + BUTTON_ALONG } },
-    { number: 3, side: 2, hole: { c: anchor.c + BUTTON_ACROSS, r: anchor.r + BUTTON_ALONG } },
-    { number: 4, side: 2, hole: { c: anchor.c + BUTTON_ACROSS, r: anchor.r } },
+export function buttonPins(anchor: Hole, rotation: IcRotation = 0): ButtonPin[] {
+  const offsets: { number: number; side: 1 | 2; dc: number; dr: number }[] = [
+    { number: 1, side: 1, dc: 0, dr: 0 },
+    { number: 2, side: 1, dc: 0, dr: BUTTON_ALONG },
+    { number: 3, side: 2, dc: BUTTON_ACROSS, dr: BUTTON_ALONG },
+    { number: 4, side: 2, dc: BUTTON_ACROSS, dr: 0 },
   ]
+  return offsets.map((pin) => {
+    const turned = turnOffset(pin.dc, pin.dr, rotation)
+    return {
+      number: pin.number,
+      side: pin.side,
+      hole: { c: anchor.c + turned.dc, r: anchor.r + turned.dr },
+    }
+  })
 }
 
 /** Side pairs are always shorted. A closed switch also bridges the two sides. */
-export function buttonNetLinks(anchor: Hole, closed: boolean): { a: Hole; b: Hole }[] {
-  const pins = buttonPins(anchor)
+export function buttonNetLinks(anchor: Hole, closed: boolean, rotation: IcRotation = 0): { a: Hole; b: Hole }[] {
+  const pins = buttonPins(anchor, rotation)
   const side1 = pins.filter((pin) => pin.side === 1)
   const side2 = pins.filter((pin) => pin.side === 2)
   const links = [
@@ -100,8 +133,15 @@ export function buttonNetLinks(anchor: Hole, closed: boolean): { a: Hole; b: Hol
   return links
 }
 
-export function buttonFits(cols: number, rows: number, parts: readonly PlacedPart[], anchor: Hole, exceptId?: string) {
-  return buttonPins(anchor).every(
+export function buttonFits(
+  cols: number,
+  rows: number,
+  parts: readonly PlacedPart[],
+  anchor: Hole,
+  exceptId?: string,
+  rotation: IcRotation = 0,
+) {
+  return buttonPins(anchor, rotation).every(
     (pin) =>
       pin.hole.c >= 0 &&
       pin.hole.r >= 0 &&
@@ -111,10 +151,16 @@ export function buttonFits(cols: number, rows: number, parts: readonly PlacedPar
   )
 }
 
+/** Hole steps from the anchor, in the button's unrotated frame. */
+export function buttonLocal(dc: number, dr: number, rotation: IcRotation = 0) {
+  return unturnOffset(dc, dr, rotation)
+}
+
 /** True when a point, in hole steps from the anchor, lands on the housing. Pin holes stay outside. */
-export function buttonBodyContains(dc: number, dr: number) {
-  const across = dc - BUTTON_ACROSS / 2
-  const along = dr - BUTTON_ALONG / 2
+export function buttonBodyContains(dc: number, dr: number, rotation: IcRotation = 0) {
+  const local = buttonLocal(dc, dr, rotation)
+  const across = local.dc - BUTTON_ACROSS / 2
+  const along = local.dr - BUTTON_ALONG / 2
   return Math.abs(across) * 28 <= BUTTON_BODY_HALF_ACROSS && Math.abs(along) * 28 <= BUTTON_BODY_HALF_ALONG
 }
 
@@ -263,7 +309,7 @@ export function partHoles(part: PlacedPart): Hole[] {
     const config = readIcConfig(part)
     return icPins(part.a, config.pinCount, config.railDistance, config.rotation)?.map((pin) => pin.hole) ?? []
   }
-  if (part.kind === "button") return buttonPins(part.a).map((pin) => pin.hole)
+  if (part.kind === "button") return buttonPins(part.a, part.rotation ?? 0).map((pin) => pin.hole)
   return [part.a, part.b]
 }
 
@@ -271,4 +317,46 @@ export function holeOccupied(parts: readonly PlacedPart[], hole: Hole, exceptId?
   return parts.some(
     (part) => part.id !== exceptId && partHoles(part).some((pin) => sameHole(pin, hole)),
   )
+}
+
+/** Same part, shifted by whole holes. The span and rotation stay put. */
+export function translatePart(part: PlacedPart, dc: number, dr: number): PlacedPart {
+  if (dc === 0 && dr === 0) return part
+  return {
+    ...part,
+    a: { c: part.a.c + dc, r: part.a.r + dr },
+    b: { c: part.b.c + dc, r: part.b.r + dr },
+  }
+}
+
+function holeOnBoard(cols: number, rows: number, hole: Hole) {
+  return hole.c >= 0 && hole.r >= 0 && hole.c < cols && hole.r < rows
+}
+
+/** True when every pin of this part lands on a free hole. The part does not block itself. */
+export function partFits(cols: number, rows: number, parts: readonly PlacedPart[], part: PlacedPart) {
+  if (part.kind === "button") return buttonFits(cols, rows, parts, part.a, part.id, part.rotation ?? 0)
+  if (part.kind === "ic") {
+    const config = readIcConfig(part)
+    return icFits(cols, rows, parts, part.a, config, part.id)
+  }
+  const holes = partHoles(part)
+  if (isHeaderKind(part.kind)) {
+    if (holes.length < 2) return false
+  } else if (!canPlacePart(part.a, part.b)) {
+    return false
+  }
+  return holes.every((hole) => holeOnBoard(cols, rows, hole) && !holeOccupied(parts, hole, part.id))
+}
+
+/** Clockwise quarter-turn around pin 1. The anchor stays. */
+export function turnPart(part: PlacedPart): PlacedPart {
+  if (part.kind === "button" || part.kind === "ic") {
+    const rotation = (((part.rotation ?? 0) + 90) % 360) as IcRotation
+    const next = { ...part, rotation }
+    if (part.kind === "button") return { ...next, b: buttonPins(part.a, rotation)[2].hole }
+    return next
+  }
+  const turned = turnOffset(part.b.c - part.a.c, part.b.r - part.a.r, 90)
+  return { ...part, b: { c: part.a.c + turned.dc, r: part.a.r + turned.dr } }
 }

@@ -231,7 +231,7 @@ export function PropertiesPanel({
       )
     }
     if (part.kind === "button") {
-      const pins = buttonPins(part.a)
+      const pins = buttonPins(part.a, part.rotation ?? 0)
       return (
         <section aria-label={heading} className="rounded-lg border bg-card p-3">
           <h2 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{heading}</h2>

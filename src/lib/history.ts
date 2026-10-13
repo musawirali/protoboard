@@ -1,5 +1,5 @@
-import type { Trace } from "./board"
-import type { IcConfig, PlacedPart } from "./parts"
+import type { Hole, Trace } from "./board"
+import type { IcConfig, IcRotation, PlacedPart } from "./parts"
 
 export const HISTORY_LIMIT = 20
 
@@ -9,10 +9,23 @@ export type NameChange = {
   to: string
 }
 
+export type ColorChange = {
+  id: string
+  from?: string
+  to: string
+}
+
 export type TraceEdit =
   | { type: "add"; index: number; trace: Trace }
   | { type: "remove"; index: number; trace: Trace }
   | { type: "rename"; changes: NameChange[] }
+  | { type: "recolor"; changes: ColorChange[] }
+
+export type PartPose = {
+  a: Hole
+  b: Hole
+  rotation?: IcRotation
+}
 
 export type BoardEdit =
   | TraceEdit
@@ -22,6 +35,8 @@ export type BoardEdit =
   | { type: "partName"; id: string; from: string; to: string }
   | { type: "partValue"; id: string; from: string; to: string }
   | { type: "icConfig"; id: string; from: IcConfig; to: IcConfig }
+  | { type: "move"; id: string; from: { a: Hole; b: Hole }; to: { a: Hole; b: Hole } }
+  | { type: "turn"; id: string; from: PartPose; to: PartPose }
 
 export type BoardSnapshot = {
   traces: Trace[]
@@ -31,11 +46,21 @@ export type BoardSnapshot = {
 function withName(trace: Trace, name: string | undefined): Trace {
   if (!name) {
     if (trace.name == null) return trace
-    const cleared: Trace = { id: trace.id, a: trace.a, b: trace.b }
-    return trace.kind ? { ...cleared, kind: trace.kind } : cleared
+    const { name: _name, ...rest } = trace
+    return rest
   }
   if (trace.name === name) return trace
   return { ...trace, name }
+}
+
+function withColor(trace: Trace, color: string | undefined): Trace {
+  if (!color) {
+    if (trace.color == null) return trace
+    const { color: _color, ...rest } = trace
+    return rest
+  }
+  if (trace.color === color) return trace
+  return { ...trace, color }
 }
 
 export function pushEdit<T>(past: readonly T[], edit: T): T[] {
@@ -45,13 +70,14 @@ export function pushEdit<T>(past: readonly T[], edit: T): T[] {
 }
 
 export function applyEdit(traces: readonly Trace[], edit: TraceEdit, direction: "undo" | "redo"): Trace[] {
-  if (edit.type === "rename") {
+  if (edit.type === "rename" || edit.type === "recolor") {
     const byId = new Map(edit.changes.map((change) => [change.id, change]))
     return traces.map((trace) => {
       if (!trace.id) return trace
       const change = byId.get(trace.id)
       if (!change) return trace
-      return withName(trace, direction === "undo" ? change.from : change.to)
+      const next = direction === "undo" ? change.from : change.to
+      return edit.type === "rename" ? withName(trace, next) : withColor(trace, next)
     })
   }
   const insert = direction === "undo" ? edit.type === "remove" : edit.type === "add"
@@ -105,6 +131,30 @@ export function applyBoardEdit(
       components: state.components.map((part) => {
         if (part.id !== edit.id) return part
         return { ...part, ...next, pinLabels: [...next.pinLabels] }
+      }),
+    }
+  }
+  if (edit.type === "move") {
+    const next = direction === "undo" ? edit.from : edit.to
+    return {
+      traces: state.traces.slice(),
+      components: state.components.map((part) =>
+        part.id === edit.id ? { ...part, a: { ...next.a }, b: { ...next.b } } : part,
+      ),
+    }
+  }
+  if (edit.type === "turn") {
+    const pose = direction === "undo" ? edit.from : edit.to
+    return {
+      traces: state.traces.slice(),
+      components: state.components.map((part) => {
+        if (part.id !== edit.id) return part
+        const turned: PlacedPart = { ...part, a: { ...pose.a }, b: { ...pose.b } }
+        if (pose.rotation === undefined) {
+          const { rotation: _removed, ...rest } = turned
+          return rest
+        }
+        return { ...turned, rotation: pose.rotation }
       }),
     }
   }

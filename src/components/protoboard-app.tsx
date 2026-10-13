@@ -11,7 +11,7 @@ import { TraceToolbar, type NetLegendItem } from "@/components/trace-toolbar"
 import { UndoBar } from "@/components/undo-bar"
 import { canCommit, sameHole, type Hole, type Trace } from "@/lib/board"
 import { applyBoardEdit, pushEdit, type BoardEdit } from "@/lib/history"
-import { assignNets, displayNetName, netColor, traceIndexAtHole } from "@/lib/nets"
+import { assignNets, displayNetColor, displayNetName, isNetColor, traceIndexAtHole } from "@/lib/nets"
 import {
   buttonFits,
   buttonNetLinks,
@@ -24,7 +24,9 @@ import {
   IC_DEFAULT_PINS,
   icFits,
   nextComponentName,
+  partFits,
   readIcConfig,
+  turnPart,
   validPinCount,
   validRailDistance,
   type IcConfig,
@@ -70,11 +72,11 @@ export function ProtoboardApp() {
   const [heldButtonId, setHeldButtonId] = useState<string | null>(null)
   const [past, setPast] = useState<BoardEdit[]>([])
   const [future, setFuture] = useState<BoardEdit[]>([])
-  const historyRef = useRef({ traces, parts, past, future, selection })
+  const historyRef = useRef({ traces, parts, past, future, selection, board })
 
   useLayoutEffect(() => {
-    historyRef.current = { traces, parts, past, future, selection }
-  }, [traces, parts, past, future, selection])
+    historyRef.current = { traces, parts, past, future, selection, board }
+  }, [traces, parts, past, future, selection, board])
 
   const undo = useCallback(() => {
     const { traces: current, parts: placed, past: done, future: ahead } = historyRef.current
@@ -102,6 +104,40 @@ export function ProtoboardApp() {
     setSelection((selected) => selectionStillThere(selected, next.traces, next.components))
   }, [])
 
+  const rotateSelected = useCallback(() => {
+    const { traces: current, parts: placed, past: done, selection: selected, board: currentBoard } = historyRef.current
+    if (!currentBoard || selected?.type !== "component") return
+    const part = placed.find((item) => item.id === selected.id)
+    if (!part) return
+    const turned = turnPart(part)
+    if (!partFits(currentBoard.cols, currentBoard.rows, placed, turned)) return
+    const same =
+      sameHole(part.a, turned.a) &&
+      sameHole(part.b, turned.b) &&
+      (part.rotation ?? 0) === (turned.rotation ?? 0)
+    if (same) return
+    const edit: BoardEdit = {
+      type: "turn",
+      id: part.id,
+      from: {
+        a: part.a,
+        b: part.b,
+        ...(part.rotation !== undefined ? { rotation: part.rotation } : {}),
+      },
+      to: {
+        a: turned.a,
+        b: turned.b,
+        ...(turned.rotation !== undefined ? { rotation: turned.rotation } : {}),
+      },
+    }
+    const next = applyBoardEdit({ traces: current, components: placed }, edit, "redo")
+    setTraces(next.traces)
+    setParts(next.components)
+    setPast(pushEdit(done, edit))
+    setFuture([])
+    setDraft(null)
+  }, [])
+
   const storeOpen = useCallback(
     (projectName: string, nextBoard: { cols: number; rows: number }, nextTraces: Trace[], nextParts: PlacedPart[]) => {
       if (!openId) return
@@ -122,9 +158,23 @@ export function ProtoboardApp() {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target
-      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        target instanceof HTMLButtonElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return
+      }
       if (event.key === "Escape") {
         setDraft(null)
+        return
+      }
+      if (event.key === " " && !event.repeat && !event.altKey && !event.metaKey && !event.ctrlKey) {
+        if (historyRef.current.selection?.type !== "component") return
+        event.preventDefault()
+        rotateSelected()
         return
       }
       const meta = event.metaKey || event.ctrlKey
@@ -140,11 +190,14 @@ export function ProtoboardApp() {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [undo, redo])
+  }, [undo, redo, rotateSelected])
 
   const heldButton = parts.find((part) => part.id === heldButtonId && part.kind === "button")
   const buttonLinks = useMemo(
-    () => parts.flatMap((part) => (part.kind === "button" ? buttonNetLinks(part.a, part.id === heldButton?.id) : [])),
+    () =>
+      parts.flatMap((part) =>
+        part.kind === "button" ? buttonNetLinks(part.a, part.id === heldButton?.id, part.rotation ?? 0) : [],
+      ),
     [parts, heldButton],
   )
   const assignment = useMemo(() => assignNets(traces, buttonLinks), [traces, buttonLinks])
@@ -156,7 +209,7 @@ export function ProtoboardApp() {
       items.set(colorKey, {
         colorKey,
         name: displayNetName(traces, assignment.colorKeys, assignment.labels, index),
-        color: netColor(colorKey),
+        color: displayNetColor(traces, assignment.colorKeys, index),
         index,
       })
     })
@@ -167,7 +220,7 @@ export function ProtoboardApp() {
     if (index < 0 || index >= traces.length) return null
     return {
       label: assignment.labels[index],
-      color: netColor(assignment.colorKeys[index]),
+      color: displayNetColor(traces, assignment.colorKeys, index),
       name: displayNetName(traces, assignment.colorKeys, assignment.labels, index),
       index,
     }
@@ -270,10 +323,33 @@ export function ProtoboardApp() {
     commit({ type: "rename", changes })
   }
 
+  function recolorNet(index: number, color: string) {
+    const next = color.trim().toLowerCase()
+    if (!isNetColor(next) || index < 0 || index >= traces.length) return
+    const current = displayNetColor(traces, assignment.colorKeys, index).toLowerCase()
+    if (current === next) return
+    const colorKey = assignment.colorKeys[index]
+    const changes = traces.flatMap((trace, member) => {
+      if (assignment.colorKeys[member] !== colorKey || !trace.id) return []
+      return [{ id: trace.id, from: trace.color, to: next }]
+    })
+    if (changes.length === 0) return
+    commit({ type: "recolor", changes })
+  }
+
   function removeTrace(id: string) {
     const index = traces.findIndex((trace) => trace.id === id)
     if (index < 0) return
     commit({ type: "remove", index, trace: traces[index] })
+  }
+
+  function movePart(id: string, a: Hole, b: Hole) {
+    if (!board) return
+    const part = parts.find((item) => item.id === id)
+    if (!part || (sameHole(part.a, a) && sameHole(part.b, b))) return
+    const next = { ...part, a, b }
+    if (!partFits(board.cols, board.rows, parts, next)) return
+    commit({ type: "move", id, from: { a: part.a, b: part.b }, to: { a, b } })
   }
 
   function removePart(id: string) {
@@ -507,6 +583,7 @@ export function ProtoboardApp() {
             onHoleClick={handleHoleClick}
             onSelect={setSelection}
             onHoldButton={setHeldButtonId}
+            onMovePart={movePart}
           />
           <ToolStrip tool={tool} onTool={chooseTool} />
         </div>
@@ -517,6 +594,7 @@ export function ProtoboardApp() {
             legend={legend}
             onCancel={() => setDraft(null)}
             onRenameNet={renameNet}
+            onRecolorNet={recolorNet}
           />
           <div className="mt-4">
             <PropertiesPanel

@@ -102,6 +102,20 @@ describe("trace history", () => {
     expect(traces[0].name).toBe("Power")
   })
 
+  it("recolors a net and keeps its name", () => {
+    const first = { ...trace("a", 0, 0, 4, 0), name: "Power" }
+    const second = trace("b", 0, 2, 4, 2)
+    let traces = [first, second]
+    const edit: TraceEdit = { type: "recolor", changes: [{ id: "a", to: "#3ee0e0" }] }
+    traces = applyEdit(traces, edit, "redo")
+    expect(traces[0].color).toBe("#3ee0e0")
+    expect(traces[0].name).toBe("Power")
+    expect(traces[1].color).toBeUndefined()
+    traces = applyEdit(traces, edit, "undo")
+    expect(traces[0].color).toBeUndefined()
+    expect(traces[0].name).toBe("Power")
+  })
+
   it("drops the redo tail after a new edit and keeps about 20 steps", () => {
     let traces: Trace[] = []
     let past: TraceEdit[] = []
@@ -202,5 +216,55 @@ describe("component history", () => {
     expect(components[0].railDistance).toBe(0)
     expect(components[0].rotation).toBe(0)
     expect(components[0].pinLabels?.[0]).toBe("")
+  })
+
+  it("undoes a move and leaves the other component where it is", () => {
+    const moved = placed("a", 1, 1, 3, 1)
+    const kept = placed("b", 0, 4, 2, 4)
+    const edit: BoardEdit = {
+      type: "move",
+      id: "a",
+      from: { a: moved.a, b: moved.b },
+      to: { a: { c: 4, r: 2 }, b: { c: 6, r: 2 } },
+    }
+    let components = applyBoardEdit({ traces: [], components: [moved, kept] }, edit, "redo").components
+    expect(components[0].a).toEqual({ c: 4, r: 2 })
+    expect(components[0].b).toEqual({ c: 6, r: 2 })
+    expect(components[1]).toEqual(kept)
+    components = applyBoardEdit({ traces: [], components }, edit, "undo").components
+    expect(components[0].a).toEqual(moved.a)
+    expect(components[0].b).toEqual(moved.b)
+    expect(components[0].kind).toBe("capacitor")
+  })
+
+  it("undoes a quarter turn without moving the other component", () => {
+    const resistor = { ...placed("a", 1, 1, 4, 1), kind: "resistor" as const, name: "R1" }
+    const kept = placed("b", 0, 6, 2, 6)
+    const edit: BoardEdit = {
+      type: "turn",
+      id: "a",
+      from: { a: resistor.a, b: resistor.b },
+      to: { a: { c: 1, r: 1 }, b: { c: 1, r: 4 } },
+    }
+    let components = applyBoardEdit({ traces: [], components: [resistor, kept] }, edit, "redo").components
+    expect(components[0].b).toEqual({ c: 1, r: 4 })
+    expect(components[1]).toEqual(kept)
+    components = applyBoardEdit({ traces: [], components }, edit, "undo").components
+    expect(components[0].a).toEqual(resistor.a)
+    expect(components[0].b).toEqual(resistor.b)
+    expect(components[0].rotation).toBeUndefined()
+
+    const button = { ...placed("s", 2, 2, 4, 4), kind: "button" as const, name: "S1", value: "" }
+    const spun: BoardEdit = {
+      type: "turn",
+      id: "s",
+      from: { a: button.a, b: button.b },
+      to: { a: button.a, b: { c: 2, r: 4 }, rotation: 90 },
+    }
+    components = applyBoardEdit({ traces: [], components: [button] }, spun, "redo").components
+    expect(components[0].rotation).toBe(90)
+    components = applyBoardEdit({ traces: [], components }, spun, "undo").components
+    expect(components[0].rotation).toBeUndefined()
+    expect(components[0].b).toEqual(button.b)
   })
 })

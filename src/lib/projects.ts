@@ -71,6 +71,10 @@ function withTraceExtras(trace: Trace, value: Record<string, unknown>): Trace | 
     if (typeof value.name !== "string") return null
     next = { ...next, name: value.name }
   }
+  if (value.color !== undefined) {
+    if (typeof value.color !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value.color)) return null
+    next = { ...next, color: value.color.toLowerCase() }
+  }
   return next
 }
 

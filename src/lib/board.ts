@@ -9,6 +9,8 @@ export type Trace = {
   readonly b: Hole
   /** Custom name for this trace's net. Unset traces use the generated "Net N" label. */
   readonly name?: string
+  /** Custom color for this trace's net, as #rrggbb. Unset traces use the palette. */
+  readonly color?: string
   /** A jumper wire. Omitted on a PCB trace. */
   readonly kind?: "wire"
 }

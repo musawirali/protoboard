@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { canCommit, holesOnSpan, type Trace } from "./board"
-import { assignNets, traceIndexAtHole } from "./nets"
+import { assignNets, displayNetColor, netColor, traceIndexAtHole } from "./nets"
 import { buttonNetLinks } from "./parts"
 
 function trace(c1: number, r1: number, c2: number, r2: number): Trace {
@@ -36,6 +36,16 @@ describe("axis-aligned spans", () => {
 })
 
 describe("assignNets", () => {
+  it("uses a custom color on the net and otherwise the palette", () => {
+    const traces = [trace(0, 0, 3, 0), { ...trace(0, 2, 3, 2), color: "#112233" }]
+    const separate = assignNets(traces)
+    expect(displayNetColor(traces, separate.colorKeys, 0)).toBe(netColor(0))
+    expect(displayNetColor(traces, separate.colorKeys, 1)).toBe("#112233")
+    const joined = [{ ...traces[0], color: "#abcdef" }, { ...traces[1], a: { c: 3, r: 0 }, b: { c: 3, r: 2 } }]
+    const shared = assignNets(joined)
+    expect(displayNetColor(joined, shared.colorKeys, 1)).toBe("#abcdef")
+  })
+
   it("merges traces that meet at an intermediate hole", () => {
     const result = assignNets([
       trace(0, 0, 4, 0),

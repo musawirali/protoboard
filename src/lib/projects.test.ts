@@ -38,7 +38,7 @@ describe("saved projects", () => {
       cols: 20,
       rows: 100,
       traces: [
-        { id: "t", a: { c: 1, r: 2 }, b: { c: 4, r: 2 }, name: "Power" },
+        { id: "t", a: { c: 1, r: 2 }, b: { c: 4, r: 2 }, name: "Power", color: "#3ee0e0" },
         { id: "w", a: { c: 1, r: 2 }, b: { c: 3, r: 5 }, kind: "wire" },
       ],
       parts: [

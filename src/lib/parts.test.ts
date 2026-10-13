@@ -9,6 +9,9 @@ import {
   componentNameTaken,
   headerHoles,
   holeOccupied,
+  partFits,
+  translatePart,
+  turnPart,
   icFits,
   icPins,
   nextComponentName,
@@ -53,6 +56,42 @@ describe("component placement", () => {
     expect(componentNameTaken(placed, "C1")).toBe(true)
     expect(componentNameTaken(placed, "C1", "c")).toBe(false)
     expect(componentNameTaken(placed, "D1")).toBe(false)
+  })
+
+  it("shifts a part by whole holes and refuses a landing that overlaps or leaves the board", () => {
+    const resistor = part("r", 1, 1, 3, 1)
+    const moved = translatePart(resistor, 2, 1)
+    expect(moved.a).toEqual({ c: 3, r: 2 })
+    expect(moved.b).toEqual({ c: 5, r: 2 })
+    expect(moved.name).toBe(resistor.name)
+    expect(partFits(8, 8, [], moved)).toBe(true)
+    expect(partFits(8, 8, [part("other", 5, 2, 5, 4)], moved)).toBe(false)
+    expect(partFits(6, 8, [], translatePart(resistor, 4, 0))).toBe(false)
+    const button = { ...part("s", 1, 1, 3, 3, "S1"), kind: "button" as const }
+    expect(partFits(8, 8, [button], button)).toBe(true)
+    expect(partFits(8, 8, [button], translatePart(button, 1, 0))).toBe(true)
+    expect(partFits(4, 4, [], translatePart(button, 2, 0))).toBe(false)
+  })
+
+  it("turns a part 90 degrees clockwise around pin 1", () => {
+    const resistor = part("r", 1, 1, 4, 1)
+    const turned = turnPart(resistor)
+    expect(turned.a).toEqual({ c: 1, r: 1 })
+    expect(turned.b).toEqual({ c: 1, r: 4 })
+    expect(turnPart(turnPart(turnPart(turned)))).toMatchObject({ a: resistor.a, b: resistor.b })
+    const button = { ...part("s", 1, 4, 3, 6, "S1"), kind: "button" as const }
+    const spun = turnPart(button)
+    expect(spun.rotation).toBe(90)
+    expect(buttonPins(spun.a, spun.rotation).map((pin) => `${pin.number}:${pin.hole.c},${pin.hole.r}`)).toEqual([
+      "1:1,4",
+      "2:-1,4",
+      "3:-1,6",
+      "4:1,6",
+    ])
+    expect(buttonBodyContains(-1, 1, 90)).toBe(true)
+    expect(buttonBodyContains(1, 1, 90)).toBe(false)
+    expect(partFits(8, 8, [], spun)).toBe(false)
+    expect(partFits(8, 8, [], turnPart(part("h", 4, 2, 4, 5)))).toBe(true)
   })
 
   it("places a 6x6 switch as four pins, two on each side", () => {
